@@ -101,8 +101,9 @@ public final class EncryptedChatRelay implements Listener {
             }
 
             for (String rawFragment : message.fragmentsInOrder()) {
+                String forwardedLine = vanillaChatLine(senderName, rawFragment);
                 for (Player target : targets) {
-                    target.sendMessage(rawFragment);
+                    target.sendMessage(forwardedLine);
                 }
             }
             plugin.getLogger().info(messages.text("relay-log", "sender", senderName, "receiver", receiver.getName()));
@@ -123,5 +124,9 @@ public final class EncryptedChatRelay implements Listener {
 
     private void logRejected(String senderName, String reason) {
         plugin.getLogger().warning(messages.text("reject-log", "sender", senderName, "reason", reason));
+    }
+
+    private static String vanillaChatLine(String senderName, String message) {
+        return "<" + senderName + "> " + message;
     }
 }

@@ -36,6 +36,18 @@ The plugin recognizes the fragment format used by the reference Krypt04Mcg clien
 
 It waits until all fragments for the same sender and message id arrive, decodes the packet header, then routes the original fragment lines to the `receiver` stored in the encrypted packet metadata.
 
+Forwarded fragments are sent to the receiver using the vanilla-style chat shape:
+
+```text
+<Alice> [KRYPT04MCG] <messageId> <index> <total> <payload>
+```
+
+This matches clients that parse incoming chat with:
+
+```regex
+^<(?<player>[^>]+)>\s*(?<message>.*)$
+```
+
 ## Configuration
 
 `config.yml` is created on first run:
@@ -71,6 +83,11 @@ mvn package
 ```
 
 The plugin jar will be generated under `target/`.
+
+## GitHub Actions
+
+The repository includes a GitHub Actions workflow at `.github/workflows/build.yml`.
+It builds the plugin on pushes, pull requests, and manual runs, then uploads the generated jar as a workflow artifact.
 
 ## Install
 
