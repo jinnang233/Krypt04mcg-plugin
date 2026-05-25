@@ -1,0 +1,24 @@
+# Language file under the plugin data folder. Built-in values: en_us, zh_cn.
+language: zh_cn
+
+# Relay the encrypted fragments back to the sender as well as the receiver.
+echo-to-sender: false
+
+# Warn the sender when the receiver is offline.
+notify-offline-receiver: true
+
+# Warn the sender when an encrypted fragment is malformed.
+notify-malformed-fragment: true
+
+# Reject a complete packet when its internal sender field does not match the
+# player who sent the chat fragments.
+enforce-sender-match: true
+
+# Drop incomplete encrypted messages after this many seconds.
+fragment-timeout-seconds: 120
+
+# Maximum number of encrypted messages kept in memory while waiting for fragments.
+max-pending-messages: 128
+
+# Maximum fragments accepted for a single encrypted message.
+max-fragments-per-message: 256

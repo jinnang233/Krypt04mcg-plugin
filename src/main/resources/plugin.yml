@@ -1,0 +1,15 @@
+name: Krypt04McgRelay
+version: ${project.version}
+main: dev.krypt04mcg.relay.Krypt04McgRelayPlugin
+api-version: '1.21'
+author: Krypt04Mcg
+description: Directed relay for Krypt04Mcg encrypted chat packets.
+commands:
+  kryptrelay:
+    description: Reload Krypt04McgRelay configuration.
+    usage: /kryptrelay reload
+    permission: krypt04mcg.relay.admin
+permissions:
+  krypt04mcg.relay.admin:
+    description: Allows reloading Krypt04McgRelay.
+    default: op
