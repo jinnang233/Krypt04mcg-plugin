@@ -32,7 +32,10 @@ jobs:
 
       - name: Build with Maven
         run: mvn --batch-mode --no-transfer-progress package
-
+      - name: Malware Scanner
+        uses: dell/common-github-actions/malware-scanner@main
+        with:
+          options: -ri
       - name: Upload plugin jar
         uses: actions/upload-artifact@v4
         with:
