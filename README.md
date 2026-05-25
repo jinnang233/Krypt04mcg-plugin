@@ -89,6 +89,8 @@ The plugin jar will be generated under `target/`.
 The repository includes a GitHub Actions workflow at `.github/workflows/build.yml`.
 It builds the plugin on pushes, pull requests, and manual runs, then uploads the generated jar as a workflow artifact.
 
+Release publishing is handled by `.github/workflows/release.yml`. Push a tag such as `v1.0.0`, or run the workflow manually, to build the plugin and create a GitHub Release. If the `RELEASE_SIGN_KEY` secret is configured with a PEM private key, release jars are signed and the public key is uploaded with the release assets.
+
 ## Install
 
 1. Build the jar or use `target/Krypt04McgRelay-1.0.0.jar`.

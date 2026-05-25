@@ -1,0 +1,101 @@
+name: Build and Release
+
+on:
+  push:
+    tags:
+      - "v*"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build-release:
+    name: Build and publish release
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "25"
+          cache: maven
+
+      - name: Build with Maven
+        run: mvn --batch-mode --no-transfer-progress package
+
+      - name: Collect release artifacts
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p release-artifacts
+          find target -maxdepth 1 -type f -name "Krypt04McgRelay-*.jar" \
+            -exec cp {} release-artifacts/ \;
+          ls -la release-artifacts
+
+      - name: Generate snapshot tag
+        id: snapshot
+        shell: bash
+        run: |
+          echo "tag=snapshot-$(date -u +'%Y%m%d-%H%M%S')" >> "$GITHUB_OUTPUT"
+          echo "name=Snapshot $(date -u +'%Y-%m-%d %H:%M:%S UTC')" >> "$GITHUB_OUTPUT"
+
+      - name: Check OpenSSL version
+        shell: bash
+        run: |
+          docker run --rm alpine/openssl version
+
+      - name: Sign release artifacts
+        shell: bash
+        env:
+          SIGN_PRIVATE_KEY: ${{ secrets.RELEASE_SIGN_KEY }}
+        run: |
+          set -euo pipefail
+          shopt -s nullglob
+
+          if [ -z "${SIGN_PRIVATE_KEY:-}" ]; then
+            echo "RELEASE_SIGN_KEY is not set; skipping artifact signing."
+            exit 0
+          fi
+
+          trap 'rm -f private_key.pem; echo "Cleaned up private key."' EXIT
+          umask 077
+          printf '%s\n' "$SIGN_PRIVATE_KEY" > private_key.pem
+
+          files=(release-artifacts/*.jar)
+          if [ ${#files[@]} -eq 0 ]; then
+            echo "No JAR files found to sign"
+            exit 1
+          fi
+
+          docker run --rm \
+            -v "$PWD:/work" \
+            -w /work \
+            alpine/openssl pkey -pubout -in /work/private_key.pem -out /work/release-artifacts/public_key.pem
+
+          for file in "${files[@]}"; do
+            docker run --rm \
+              -v "$PWD:/work" \
+              -w /work \
+              alpine/openssl \
+              dgst \
+              -sign /work/private_key.pem \
+              -out "/work/${file}.sign" \
+              "/work/${file}"
+          done
+
+          rm -f private_key.pem
+          ls -la release-artifacts
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ github.ref_type == 'tag' && github.ref_name || steps.snapshot.outputs.tag }}
+          name: ${{ github.ref_type == 'tag' && github.ref_name || steps.snapshot.outputs.name }}
+          target_commitish: ${{ github.sha }}
+          files: release-artifacts/*
+          generate_release_notes: true
