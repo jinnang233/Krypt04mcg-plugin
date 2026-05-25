@@ -1,6 +1,10 @@
 # Language file under the plugin data folder. Built-in values: en_us, zh_cn.
 language: zh_cn
 
+# Tell players that this server has Krypt04McgRelay installed and remind
+# compatible mod users to enable Shadow Listen Mode.
+announce-plugin-installed: true
+
 # Relay the encrypted fragments back to the sender as well as the receiver.
 echo-to-sender: false
 

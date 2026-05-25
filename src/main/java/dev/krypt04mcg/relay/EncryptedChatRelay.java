@@ -12,6 +12,7 @@ import org.bukkit.event.EventHandler;
 import org.bukkit.event.EventPriority;
 import org.bukkit.event.Listener;
 import org.bukkit.event.player.AsyncPlayerChatEvent;
+import org.bukkit.event.player.PlayerJoinEvent;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -57,6 +58,23 @@ public final class EncryptedChatRelay implements Listener {
 
     public void clear() {
         collector.clear();
+    }
+
+    public void announceToOnlinePlayers() {
+        if (!config.announcePluginInstalled()) {
+            return;
+        }
+        for (Player player : Bukkit.getOnlinePlayers()) {
+            sendPluginInstalledNotice(player);
+        }
+    }
+
+    @EventHandler(priority = EventPriority.MONITOR)
+    public void onJoin(PlayerJoinEvent event) {
+        if (!config.announcePluginInstalled()) {
+            return;
+        }
+        Bukkit.getScheduler().runTaskLater(plugin, () -> sendPluginInstalledNotice(event.getPlayer()), 1L);
     }
 
     private void routeOnMainThread(String senderName, FragmentCollector.CompleteMessage message) {
@@ -124,6 +142,10 @@ public final class EncryptedChatRelay implements Listener {
 
     private void logRejected(String senderName, String reason) {
         plugin.getLogger().warning(messages.text("reject-log", "sender", senderName, "reason", reason));
+    }
+
+    private void sendPluginInstalledNotice(Player player) {
+        player.sendMessage(ChatColor.AQUA + messages.text("plugin-installed-notice"));
     }
 
     private static String vanillaChatLine(String senderName, String message) {

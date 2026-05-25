@@ -1,4 +1,5 @@
 plugin-enabled: "Krypt04McgRelay enabled."
+plugin-installed-notice: "This server has Krypt04McgRelay installed. If you have the matching mod installed, please enable Shadow Listen Mode."
 config-reloaded: "Krypt04McgRelay configuration reloaded."
 command-usage: "Usage: /%label% reload"
 sender-rejected: "Encrypted message was rejected: %reason%"

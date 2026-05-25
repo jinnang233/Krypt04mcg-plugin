@@ -54,6 +54,7 @@ This matches clients that parse incoming chat with:
 
 ```yaml
 language: zh_cn
+announce-plugin-installed: true
 echo-to-sender: false
 notify-offline-receiver: true
 notify-malformed-fragment: true
@@ -74,6 +75,8 @@ Set `language` to `zh_cn` or `en_us`, then run:
 /kryptrelay reload
 ```
 
+Set `announce-plugin-installed` to `false` if you do not want players to receive the plugin-installed notice. The notice tells compatible mod users to enable "Shadow Listen Mode" / "影听模式".
+
 ## Build
 
 With Maven installed:
@@ -89,11 +92,11 @@ The plugin jar will be generated under `target/`.
 The repository includes a GitHub Actions workflow at `.github/workflows/build.yml`.
 It builds the plugin on pushes, pull requests, and manual runs, then uploads the generated jar as a workflow artifact.
 
-Release publishing is handled by `.github/workflows/release.yml`. Push a tag such as `v1.0.0`, or run the workflow manually, to build the plugin and create a GitHub Release. If the `RELEASE_SIGN_KEY` secret is configured with a PEM private key, release jars are signed and the public key is uploaded with the release assets.
+Release publishing is handled by `.github/workflows/release.yml`. Push a tag such as `v1.0.1`, or run the workflow manually, to build the plugin and create a GitHub Release. If the `RELEASE_SIGN_KEY` secret is configured with a PEM private key, release jars are signed and the public key is uploaded with the release assets.
 
 ## Install
 
-1. Build the jar or use `target/Krypt04McgRelay-1.0.0.jar`.
+1. Build the jar or use `target/Krypt04McgRelay-1.0.1.jar`.
 2. Put it into the server `plugins/` directory.
 3. Restart the server.
 4. Edit the generated config if needed.

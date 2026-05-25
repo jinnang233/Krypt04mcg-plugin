@@ -1,4 +1,5 @@
 plugin-enabled: "Krypt04McgRelay 已启用。"
+plugin-installed-notice: "本服务器已安装 Krypt04McgRelay。若你安装了对应的模组，请开启“影听模式”。"
 config-reloaded: "Krypt04McgRelay 配置已重载。"
 command-usage: "用法：/%label% reload"
 sender-rejected: "加密消息已被拒绝：%reason%"

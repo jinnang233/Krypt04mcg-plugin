@@ -6,6 +6,7 @@ import java.time.Duration;
 
 public record RelayConfig(
         String language,
+        boolean announcePluginInstalled,
         boolean echoToSender,
         boolean notifyOfflineReceiver,
         boolean notifyMalformedFragment,
@@ -17,6 +18,7 @@ public record RelayConfig(
     public static RelayConfig from(JavaPlugin plugin) {
         return new RelayConfig(
                 plugin.getConfig().getString("language", "zh_cn"),
+                plugin.getConfig().getBoolean("announce-plugin-installed", true),
                 plugin.getConfig().getBoolean("echo-to-sender", false),
                 plugin.getConfig().getBoolean("notify-offline-receiver", true),
                 plugin.getConfig().getBoolean("notify-malformed-fragment", true),

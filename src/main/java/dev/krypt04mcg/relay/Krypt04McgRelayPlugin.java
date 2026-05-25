@@ -45,5 +45,6 @@ public final class Krypt04McgRelayPlugin extends JavaPlugin {
         }
         relay = new EncryptedChatRelay(this, config, messages);
         getServer().getPluginManager().registerEvents(relay, this);
+        relay.announceToOnlinePlayers();
     }
 }
