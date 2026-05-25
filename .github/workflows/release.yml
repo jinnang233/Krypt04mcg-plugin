@@ -48,7 +48,10 @@ jobs:
         shell: bash
         run: |
           docker run --rm alpine/openssl version
-
+      - name: Malware Scanner
+        uses: dell/common-github-actions/malware-scanner@main
+        with:
+          options: -ri
       - name: Sign release artifacts
         shell: bash
         env:
