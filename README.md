@@ -26,7 +26,8 @@ Alice 向 Bob 发送了加密消息。
 
 - Built against Spigot API `26.1.2-R0.1-SNAPSHOT`.
 - Uses Java `25` because Minecraft/Spigot 26.1 requires Java 25 or later.
-- Uses Bukkit API only, no NMS or CraftBukkit internals.
+- Requires ProtocolLib installed as a separate server plugin.
+- Uses Bukkit API plus ProtocolLib packet interception, no NMS or CraftBukkit internals.
 
 ## Packet Format
 
@@ -69,6 +70,8 @@ max-fragments-per-message: 256
 
 `kick-krypt04mcg-chat-spam` is `false` by default. When it is `false`, Krypt04Mcg fragments do not count toward Minecraft chat spam kicks; when it is `true`, Krypt04Mcg fragments use the normal spam kick behavior. Non-Krypt04Mcg chat is not changed by this option.
 
+ProtocolLib is declared as a `provided` dependency and is not bundled into the Krypt04McgRelay jar. For Minecraft/Spigot `26.1.2`, install the ProtocolLib GitHub `dev-build` separately in the server `plugins/` folder; the `5.4.0` release is not sufficient for this server version.
+
 Language files are also created in the plugin data folder:
 
 - `messages_zh_cn.yml`
@@ -101,11 +104,12 @@ Release publishing is handled by `.github/workflows/release.yml`. Push a tag suc
 
 ## Install
 
-1. Build the jar or use `target/Krypt04McgRelay-1.0.6.jar`.
+1. Build the jar or use `target/Krypt04McgRelay-1.0.7.jar`.
 2. Put it into the server `plugins/` directory.
-3. Restart the server.
-4. Edit the generated config if needed.
-5. Run `/kryptrelay reload` after config or language changes.
+3. Install the ProtocolLib GitHub `dev-build` separately in the server `plugins/` directory.
+4. Restart the server.
+5. Edit the generated config if needed.
+6. Run `/kryptrelay reload` after config or language changes.
 
 ## Notes
 

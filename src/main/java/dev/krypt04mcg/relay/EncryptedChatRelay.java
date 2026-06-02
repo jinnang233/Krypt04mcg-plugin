@@ -24,31 +24,35 @@ public final class EncryptedChatRelay implements Listener {
     private final MessageBundle messages;
     private final FragmentService fragmentService = new FragmentService();
     private final PacketCodec packetCodec = new PacketCodec();
-    private final ChatSpamKickController chatSpamKickController;
     private final FragmentCollector collector;
 
     public EncryptedChatRelay(Krypt04McgRelayPlugin plugin, RelayConfig config, MessageBundle messages) {
         this.plugin = plugin;
         this.config = config;
         this.messages = messages;
-        this.chatSpamKickController = new ChatSpamKickController(plugin.getLogger());
         this.collector = new FragmentCollector(config.fragmentTimeout(), config.maxPendingMessages(),
                 config.maxFragmentsPerMessage());
     }
 
     @EventHandler(priority = EventPriority.LOWEST, ignoreCancelled = true)
     public void onChat(AsyncPlayerChatEvent event) {
-        Optional<String> fragmentLine = fragmentService.extractFragmentLine(event.getMessage());
-        if (fragmentLine.isEmpty()) {
+        if (!isKrypt04McgMessage(event.getMessage())) {
             return;
         }
 
         event.setCancelled(true);
         event.getRecipients().clear();
+        handleKrypt04McgMessage(event.getPlayer(), event.getMessage());
+    }
 
-        Player sender = event.getPlayer();
-        if (!config.kickKrypt04McgChatSpam()) {
-            chatSpamKickController.ignoreCurrentKrypt04McgMessage(sender);
+    boolean isKrypt04McgMessage(String rawMessage) {
+        return fragmentService.extractFragmentLine(rawMessage).isPresent();
+    }
+
+    void handleKrypt04McgMessage(Player sender, String rawMessage) {
+        Optional<String> fragmentLine = fragmentService.extractFragmentLine(rawMessage);
+        if (fragmentLine.isEmpty()) {
+            return;
         }
         try {
             collector.cleanupTimedOut();

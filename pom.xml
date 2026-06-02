@@ -5,7 +5,7 @@
 
     <groupId>dev.krypt04mcg</groupId>
     <artifactId>krypt04mcg-relay</artifactId>
-    <version>1.0.6</version>
+    <version>1.0.7</version>
     <packaging>jar</packaging>
 
     <name>Krypt04McgRelay</name>
@@ -28,6 +28,13 @@
             <groupId>org.spigotmc</groupId>
             <artifactId>spigot-api</artifactId>
             <version>26.1.2-R0.1-SNAPSHOT</version>
+            <scope>provided</scope>
+        </dependency>
+        <dependency>
+            <!-- Compile against the latest Maven Central API; run 26.1.2 servers with the GitHub dev-build installed. -->
+            <groupId>net.dmulloy2</groupId>
+            <artifactId>ProtocolLib</artifactId>
+            <version>5.4.0</version>
             <scope>provided</scope>
         </dependency>
     </dependencies>

@@ -8,6 +8,7 @@ import org.bukkit.plugin.java.JavaPlugin;
 
 public final class Krypt04McgRelayPlugin extends JavaPlugin {
     private EncryptedChatRelay relay;
+    private ProtocolLibChatInterceptor protocolLibChatInterceptor;
     private MessageBundle messages;
 
     @Override
@@ -22,6 +23,10 @@ public final class Krypt04McgRelayPlugin extends JavaPlugin {
     public void onDisable() {
         if (relay != null) {
             relay.clear();
+        }
+        if (protocolLibChatInterceptor != null) {
+            protocolLibChatInterceptor.unregister();
+            protocolLibChatInterceptor = null;
         }
     }
 
@@ -44,8 +49,13 @@ public final class Krypt04McgRelayPlugin extends JavaPlugin {
             HandlerList.unregisterAll(relay);
             relay.clear();
         }
+        if (protocolLibChatInterceptor != null) {
+            protocolLibChatInterceptor.unregister();
+        }
         relay = new EncryptedChatRelay(this, config, messages);
         getServer().getPluginManager().registerEvents(relay, this);
+        protocolLibChatInterceptor = new ProtocolLibChatInterceptor(this, config, relay);
+        protocolLibChatInterceptor.register();
         relay.announceToOnlinePlayers();
     }
 }
