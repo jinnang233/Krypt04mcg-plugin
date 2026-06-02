@@ -1,4 +1,5 @@
 plugin-enabled: "Krypt04McgRelay enabled."
+experimental-warning: "Krypt04Mcg is experimental software and has not undergone independent security auditing. The protocol, implementation, and cryptographic design may contain vulnerabilities or design flaws. Do not rely on this mod to protect highly sensitive, important, or production-critical data."
 plugin-installed-notice: "This server has Krypt04McgRelay installed. If you have the matching mod installed, please enable Shadow Listen Mode."
 config-reloaded: "Krypt04McgRelay configuration reloaded."
 command-usage: "Usage: /%label% reload"

@@ -15,6 +15,7 @@ public final class Krypt04McgRelayPlugin extends JavaPlugin {
         saveDefaultConfig();
         reloadRelay();
         getLogger().info(messages.text("plugin-enabled"));
+        getLogger().warning(messages.text("experimental-warning"));
     }
 
     @Override
