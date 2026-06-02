@@ -18,6 +18,11 @@ notify-malformed-fragment: true
 # player who sent the chat fragments.
 enforce-sender-match: true
 
+# Allow Minecraft's chat spam protection to kick players for sending
+# Krypt04Mcg fragment messages too quickly. When false, Krypt04Mcg fragments
+# are still relayed privately, but they do not count toward chat spam kicks.
+kick-krypt04mcg-chat-spam: false
+
 # Drop incomplete encrypted messages after this many seconds.
 fragment-timeout-seconds: 120
 

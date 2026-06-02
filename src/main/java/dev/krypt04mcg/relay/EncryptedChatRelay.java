@@ -24,12 +24,14 @@ public final class EncryptedChatRelay implements Listener {
     private final MessageBundle messages;
     private final FragmentService fragmentService = new FragmentService();
     private final PacketCodec packetCodec = new PacketCodec();
+    private final ChatSpamKickController chatSpamKickController;
     private final FragmentCollector collector;
 
     public EncryptedChatRelay(Krypt04McgRelayPlugin plugin, RelayConfig config, MessageBundle messages) {
         this.plugin = plugin;
         this.config = config;
         this.messages = messages;
+        this.chatSpamKickController = new ChatSpamKickController(plugin.getLogger());
         this.collector = new FragmentCollector(config.fragmentTimeout(), config.maxPendingMessages(),
                 config.maxFragmentsPerMessage());
     }
@@ -45,6 +47,9 @@ public final class EncryptedChatRelay implements Listener {
         event.getRecipients().clear();
 
         Player sender = event.getPlayer();
+        if (!config.kickKrypt04McgChatSpam()) {
+            chatSpamKickController.ignoreCurrentKrypt04McgMessage(sender);
+        }
         try {
             collector.cleanupTimedOut();
             Fragment fragment = fragmentService.parse(fragmentLine.get());

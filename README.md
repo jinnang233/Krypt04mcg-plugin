@@ -61,10 +61,13 @@ echo-to-sender: false
 notify-offline-receiver: true
 notify-malformed-fragment: true
 enforce-sender-match: true
+kick-krypt04mcg-chat-spam: false
 fragment-timeout-seconds: 120
 max-pending-messages: 128
 max-fragments-per-message: 256
 ```
+
+`kick-krypt04mcg-chat-spam` is `false` by default. When it is `false`, Krypt04Mcg fragments do not count toward Minecraft chat spam kicks; when it is `true`, Krypt04Mcg fragments use the normal spam kick behavior. Non-Krypt04Mcg chat is not changed by this option.
 
 Language files are also created in the plugin data folder:
 
@@ -98,7 +101,7 @@ Release publishing is handled by `.github/workflows/release.yml`. Push a tag suc
 
 ## Install
 
-1. Build the jar or use `target/Krypt04McgRelay-1.0.1.jar`.
+1. Build the jar or use `target/Krypt04McgRelay-1.0.6.jar`.
 2. Put it into the server `plugins/` directory.
 3. Restart the server.
 4. Edit the generated config if needed.
