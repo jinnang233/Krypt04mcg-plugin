@@ -26,8 +26,8 @@ Alice 向 Bob 发送了加密消息。
 
 ## Supported Server
 
-- Built against Spigot API `26.1.2-R0.1-SNAPSHOT`.
-- Uses Java `25` because Minecraft/Spigot 26.1 requires Java 25 or later.
+- Built against Spigot API `26.2-R0.1-SNAPSHOT`.
+- Uses Java `25` because Minecraft/Spigot 26.2 requires Java 25 or later.
 - Requires ProtocolLib installed as a separate server plugin.
 - Uses Bukkit API plus ProtocolLib packet interception, no NMS or CraftBukkit internals.
 
@@ -72,7 +72,7 @@ max-fragments-per-message: 256
 
 `kick-krypt04mcg-chat-spam` is `false` by default. When it is `false`, Krypt04Mcg fragments do not count toward Minecraft chat spam kicks; when it is `true`, Krypt04Mcg fragments use the normal spam kick behavior. Non-Krypt04Mcg chat is not changed by this option.
 
-ProtocolLib is declared as a `provided` dependency and is not bundled into the Krypt04McgRelay jar. For Minecraft/Spigot `26.1.2`, install the ProtocolLib GitHub `dev-build` separately in the server `plugins/` folder; the `5.4.0` release is not sufficient for this server version.
+ProtocolLib is declared as a `provided` dependency and is not bundled into the Krypt04McgRelay jar. For Minecraft/Spigot `26.2`, install the ProtocolLib GitHub `dev-build` separately in the server `plugins/` folder; the `5.4.0` release is not sufficient for this server version.
 
 Language files are also created in the plugin data folder:
 
