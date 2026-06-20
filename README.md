@@ -1,5 +1,7 @@
 # Krypt04McgRelay
 
+[![Build](https://github.com/jinnang233/Krypt04mcg-plugin/actions/workflows/build.yml/badge.svg)](https://github.com/jinnang233/Krypt04mcg-plugin/actions/workflows/build.yml)[![Build and Release](https://github.com/jinnang233/Krypt04mcg-plugin/actions/workflows/release.yml/badge.svg)](https://github.com/jinnang233/Krypt04mcg-plugin/actions/workflows/release.yml)[![CodeQL](https://github.com/jinnang233/Krypt04mcg-plugin/actions/workflows/github-code-scanning/codeql/badge.svg)](https://github.com/jinnang233/Krypt04mcg-plugin/actions/workflows/github-code-scanning/codeql)
+
 > [!WARNING]
 > This codebase was **generated with AI assistance**. Review the implementation carefully, especially the cryptography, key storage, networking behavior, and dependency configuration, before using it in any real environment.
 >
