@@ -106,7 +106,7 @@ Release publishing is handled by `.github/workflows/release.yml`. Push a tag suc
 
 ## Install
 
-1. Build the jar or use `target/Krypt04McgRelay-1.0.7.jar`.
+1. Build the jar or use `target/Krypt04McgRelay-1.0.8.jar`.
 2. Put it into the server `plugins/` directory.
 3. Install the ProtocolLib GitHub `dev-build` separately in the server `plugins/` directory.
 4. Restart the server.
