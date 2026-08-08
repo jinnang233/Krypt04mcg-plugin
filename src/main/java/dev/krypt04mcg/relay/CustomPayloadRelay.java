@@ -1,18 +1,17 @@
 package dev.krypt04mcg.relay;
 
-import org.bukkit.Bukkit;
 import org.bukkit.entity.Player;
+import org.bukkit.plugin.messaging.Messenger;
 import org.bukkit.plugin.messaging.PluginMessageListener;
 
-import java.io.ByteArrayInputStream;
-import java.io.IOException;
+import java.io.ByteArrayOutputStream;
 import java.nio.charset.StandardCharsets;
 
 final class CustomPayloadRelay implements PluginMessageListener {
     static final String CHANNEL = "krypt04mcg:chat_fragment";
 
-    private static final int MAX_VARINT_BYTES = 5;
-    private static final int MAX_STRING_BYTES = 32767;
+    private static final int MAX_USERNAME_CHARS = 16;
+    private static final int MAX_STRING_CHARS = 32767;
 
     private final Krypt04McgRelayPlugin plugin;
 
@@ -21,82 +20,136 @@ final class CustomPayloadRelay implements PluginMessageListener {
     }
 
     void register() {
-        plugin.getServer().getMessenger().registerIncomingPluginChannel(plugin, CHANNEL, this);
-        plugin.getServer().getMessenger().registerOutgoingPluginChannel(plugin, CHANNEL);
+        Messenger messenger = plugin.getServer().getMessenger();
+        messenger.registerIncomingPluginChannel(plugin, CHANNEL, this);
+        messenger.registerOutgoingPluginChannel(plugin, CHANNEL);
     }
 
     void unregister() {
-        plugin.getServer().getMessenger().unregisterIncomingPluginChannel(plugin, CHANNEL, this);
-        plugin.getServer().getMessenger().unregisterOutgoingPluginChannel(plugin, CHANNEL);
+        Messenger messenger = plugin.getServer().getMessenger();
+        messenger.unregisterIncomingPluginChannel(plugin, CHANNEL, this);
+        messenger.unregisterOutgoingPluginChannel(plugin, CHANNEL);
     }
 
     @Override
-    public void onPluginMessageReceived(String channel, Player sender, byte[] message) {
+    public void onPluginMessageReceived(String channel, Player source, byte[] message) {
         if (!CHANNEL.equals(channel)) {
             return;
         }
 
         try {
-            ChatFragmentPayload payload = ChatFragmentPayload.decode(message);
-            Player receiver = Bukkit.getPlayerExact(payload.receiver());
-            if (receiver == null) {
+            ServerboundPayload payload = ServerboundPayload.decode(message);
+            Player receiver = plugin.getServer().getPlayerExact(payload.receiver());
+            if (receiver == null || !receiver.isOnline()) {
                 plugin.getLogger().fine("Custom payload receiver offline: " + payload.receiver());
                 return;
             }
 
-            receiver.sendPluginMessage(plugin, CHANNEL, message);
+            if (!receiver.getListeningPluginChannels().contains(CHANNEL)) {
+                return;
+            }
+
+            // Never forward the client-supplied first field. The clientbound
+            // sender identity must come from Bukkit's authenticated connection.
+            byte[] outgoing = encodeClientbound(source.getName(), payload.fragment(), payload.version());
+            receiver.sendPluginMessage(plugin, CHANNEL, outgoing);
         } catch (IllegalArgumentException e) {
-            plugin.getLogger().warning("Rejected malformed " + CHANNEL + " payload from " + sender.getName()
+            plugin.getLogger().warning("Rejected malformed " + CHANNEL + " payload from " + source.getName()
                     + ": " + e.getMessage());
         }
     }
 
-    private record ChatFragmentPayload(String receiver, String fragment, int version) {
-        static ChatFragmentPayload decode(byte[] data) {
-            try {
-                ByteArrayInputStream in = new ByteArrayInputStream(data);
-                String receiver = readString(in);
-                String fragment = readString(in);
-                int version = readVarInt(in);
-                if (in.available() != 0) {
-                    throw new IOException("trailing payload bytes: " + in.available());
+    static byte[] encodeClientbound(String sender, String fragment, int version) {
+        if (version <= 0) {
+            throw new IllegalArgumentException("Invalid protocol version");
+        }
+
+        ByteArrayOutputStream output = new ByteArrayOutputStream();
+        writeUtf(output, sender, MAX_USERNAME_CHARS);
+        writeUtf(output, fragment, MAX_STRING_CHARS);
+        writeVarInt(output, version);
+        return output.toByteArray();
+    }
+
+    private static void writeUtf(ByteArrayOutputStream output, String value, int maxChars) {
+        if (value.length() > maxChars) {
+            throw new IllegalArgumentException("String is too long");
+        }
+
+        byte[] bytes = value.getBytes(StandardCharsets.UTF_8);
+        if (bytes.length > maxChars * 3) {
+            throw new IllegalArgumentException("String is too long");
+        }
+
+        writeVarInt(output, bytes.length);
+        output.write(bytes, 0, bytes.length);
+    }
+
+    private static void writeVarInt(ByteArrayOutputStream output, int value) {
+        while ((value & ~0x7F) != 0) {
+            output.write((value & 0x7F) | 0x80);
+            value >>>= 7;
+        }
+        output.write(value);
+    }
+
+    record ServerboundPayload(String receiver, String fragment, int version) {
+        static ServerboundPayload decode(byte[] data) {
+            PayloadReader reader = new PayloadReader(data);
+            String receiver = reader.readUtf(MAX_USERNAME_CHARS);
+            String fragment = reader.readUtf(MAX_STRING_CHARS);
+            int version = reader.readVarInt();
+
+            if (!reader.finished() || version <= 0) {
+                throw new IllegalArgumentException("Invalid payload");
+            }
+
+            return new ServerboundPayload(receiver, fragment, version);
+        }
+    }
+
+    private static final class PayloadReader {
+        private final byte[] data;
+        private int index;
+
+        private PayloadReader(byte[] data) {
+            this.data = data;
+        }
+
+        private String readUtf(int maxChars) {
+            int byteLength = readVarInt();
+            if (byteLength < 0 || byteLength > maxChars * 3 || byteLength > data.length - index) {
+                throw new IllegalArgumentException("Invalid UTF-8 length");
+            }
+
+            String value = new String(data, index, byteLength, StandardCharsets.UTF_8);
+            index += byteLength;
+            if (value.length() > maxChars) {
+                throw new IllegalArgumentException("String is too long");
+            }
+            return value;
+        }
+
+        private int readVarInt() {
+            int result = 0;
+            int shift = 0;
+
+            while (true) {
+                if (index >= data.length || shift >= 35) {
+                    throw new IllegalArgumentException("Invalid VarInt");
                 }
-                return new ChatFragmentPayload(receiver, fragment, version);
-            } catch (IOException e) {
-                throw new IllegalArgumentException(e.getMessage(), e);
+
+                int current = data[index++] & 0xFF;
+                result |= (current & 0x7F) << shift;
+                if ((current & 0x80) == 0) {
+                    return result;
+                }
+                shift += 7;
             }
         }
 
-        private static String readString(ByteArrayInputStream in) throws IOException {
-            int length = readVarInt(in);
-            if (length < 0) {
-                throw new IOException("negative string length");
-            }
-            if (length > MAX_STRING_BYTES) {
-                throw new IOException("string field too long: " + length);
-            }
-            byte[] bytes = in.readNBytes(length);
-            if (bytes.length != length) {
-                throw new IOException("truncated string field");
-            }
-            return new String(bytes, StandardCharsets.UTF_8);
-        }
-
-        private static int readVarInt(ByteArrayInputStream in) throws IOException {
-            int value = 0;
-            int position = 0;
-            for (int i = 0; i < MAX_VARINT_BYTES; i++) {
-                int currentByte = in.read();
-                if (currentByte == -1) {
-                    throw new IOException("truncated varint");
-                }
-                value |= (currentByte & 0x7F) << position;
-                if ((currentByte & 0x80) == 0) {
-                    return value;
-                }
-                position += 7;
-            }
-            throw new IOException("varint too long");
+        private boolean finished() {
+            return index == data.length;
         }
     }
 }
