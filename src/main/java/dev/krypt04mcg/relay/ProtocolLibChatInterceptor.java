@@ -9,7 +9,16 @@ import com.comphenix.protocol.events.PacketEvent;
 import org.bukkit.Bukkit;
 import org.bukkit.entity.Player;
 
+import java.util.List;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
+import java.util.stream.Stream;
+
 final class ProtocolLibChatInterceptor {
+    private static final Pattern PRIVATE_MESSAGE_COMMAND = Pattern.compile(
+            "^/?(?:minecraft:)?(?:tell|msg|w)\\s+\\S+\\s+(.+)$",
+            Pattern.CASE_INSENSITIVE);
+
     private final Krypt04McgRelayPlugin plugin;
     private final RelayConfig config;
     private final EncryptedChatRelay relay;
@@ -22,7 +31,7 @@ final class ProtocolLibChatInterceptor {
 
     void register() {
         ProtocolLibrary.getProtocolManager().addPacketListener(new PacketAdapter(plugin, ListenerPriority.LOWEST,
-                PacketType.Play.Client.CHAT) {
+                supportedClientMessagePackets()) {
             @Override
             public void onPacketReceiving(PacketEvent event) {
                 String message = readMessage(event);
@@ -30,19 +39,44 @@ final class ProtocolLibChatInterceptor {
                     return;
                 }
 
-                Player sender = event.getPlayer();
+                if (!event.getPacketType().equals(PacketType.Play.Client.CHAT)) {
+                    message = extractPrivateMessageBody(message);
+                    if (message == null) {
+                        return;
+                    }
+                }
+
                 if (!relay.isKrypt04McgMessage(message)) {
                     return;
                 }
 
+                Player sender = event.getPlayer();
+                String relayMessage = message;
                 event.setCancelled(true);
-                Bukkit.getScheduler().runTask(plugin, () -> relay.handleKrypt04McgMessage(sender, message));
+                Bukkit.getScheduler().runTask(plugin, () -> relay.handleKrypt04McgMessage(sender, relayMessage));
             }
         });
     }
 
     void unregister() {
         ProtocolLibrary.getProtocolManager().removePacketListeners(plugin);
+    }
+
+    private static List<PacketType> supportedClientMessagePackets() {
+        return Stream.of(
+                        PacketType.Play.Client.CHAT,
+                        PacketType.Play.Client.CHAT_COMMAND,
+                        PacketType.Play.Client.CHAT_COMMAND_SIGNED)
+                .filter(PacketType::isSupported)
+                .toList();
+    }
+
+    static String extractPrivateMessageBody(String command) {
+        if (command == null) {
+            return null;
+        }
+        Matcher matcher = PRIVATE_MESSAGE_COMMAND.matcher(command);
+        return matcher.matches() ? matcher.group(1) : null;
     }
 
     private static String readMessage(PacketEvent event) {

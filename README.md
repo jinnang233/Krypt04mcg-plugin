@@ -74,6 +74,8 @@ max-fragments-per-message: 256
 
 `kick-krypt04mcg-chat-spam` is `false` by default. When it is `false`, Krypt04Mcg fragments do not count toward Minecraft chat spam kicks; when it is `true`, Krypt04Mcg fragments use the normal spam kick behavior. Non-Krypt04Mcg chat is not changed by this option.
 
+The spam-kick bypass also covers Krypt04Mcg fragments sent through vanilla private-message commands (`/tell`, `/msg`, and `/w`). Other commands and ordinary private messages are not intercepted.
+
 ProtocolLib is declared as a `provided` dependency and is not bundled into the Krypt04McgRelay jar. For Minecraft/Spigot `26.2`, install the ProtocolLib GitHub `dev-build` separately in the server `plugins/` folder; the `5.4.0` release is not sufficient for this server version.
 
 Language files are also created in the plugin data folder:
