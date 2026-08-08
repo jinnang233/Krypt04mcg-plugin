@@ -1,66 +1,129 @@
 # Krypt04McgRelay
 
-[![Build](https://github.com/jinnang233/Krypt04mcg-plugin/actions/workflows/build.yml/badge.svg)](https://github.com/jinnang233/Krypt04mcg-plugin/actions/workflows/build.yml)
-[![Build and Release](https://github.com/jinnang233/Krypt04mcg-plugin/actions/workflows/release.yml/badge.svg)](https://github.com/jinnang233/Krypt04mcg-plugin/actions/workflows/release.yml)
-[![CodeQL](https://github.com/jinnang233/Krypt04mcg-plugin/actions/workflows/github-code-scanning/codeql/badge.svg)](https://github.com/jinnang233/Krypt04mcg-plugin/actions/workflows/github-code-scanning/codeql)
+[![Build](https://github.com/jinnang233/Krypt04mcg-plugin/actions/workflows/build.yml/badge.svg)](https://github.com/jinnang233/Krypt04mcg-plugin/actions/workflows/build.yml)[![Build and Release](https://github.com/jinnang233/Krypt04mcg-plugin/actions/workflows/release.yml/badge.svg)](https://github.com/jinnang233/Krypt04mcg-plugin/actions/workflows/release.yml)[![CodeQL](https://github.com/jinnang233/Krypt04mcg-plugin/actions/workflows/github-code-scanning/codeql/badge.svg)](https://github.com/jinnang233/Krypt04mcg-plugin/actions/workflows/github-code-scanning/codeql)
 
 > [!WARNING]
-> This codebase was generated with AI assistance. Review the implementation carefully, especially its networking behavior and dependency configuration, before using it in any real environment.
+> This codebase was **generated with AI assistance**. Review the implementation carefully, especially the cryptography, key storage, networking behavior, and dependency configuration, before using it in any real environment.
 >
-> If possible, run it in an isolated environment and scan downloaded build artifacts with VirusTotal or a comparable service. Report security or licensing concerns through Issues.
+> If possible, please run it in an **ISOLATED** environment, such as a virtual machine, to avoid potential security risks from build artifacts, such as the possibility that the maintainer’s computer has been infected with malware.
+>
+> If you discover any code security issues, or any copyright or licensing concerns, please report them in Issues. Thank you for your understanding.
 
 > [!WARNING]
-> Krypt04Mcg is experimental software and has not undergone an independent security audit. The protocol and cryptographic design may contain vulnerabilities. Do not rely on it to protect sensitive or production-critical data; use a mature end-to-end encrypted tool for those cases.
+> Krypt04Mcg is **EXPERIMENTAL** software and has not undergone independent security auditing. The protocol, implementation, and cryptographic design **may contain vulnerabilities or design flaws**. Do not rely on this mod to protect highly sensitive, important, or production-critical data. If you require mature and battle-tested end-to-end encrypted communication, consider using established tools such as Signal or SimpleX instead.
 
 ## Disclaimer
 
-Krypt04McgRelay and its build artifacts are provided as-is, with no guarantee that they are secure, trustworthy, virus-free, or fit for a particular purpose. This project is not intended for production environments or high-value data.
+Krypt04Mcg is an **EXPERIMENTAL** plugin project. Its build environment, release artifacts, dependencies, and runtime behavior are provided as-is, with **NO GUARANTEE** that they are secure, trustworthy, virus-free, or suitable for any particular use. Before installing or running any downloaded artifact, **scan it with VirusTotal** or a comparable malware-scanning service whenever possible.
 
-Krypt04McgRelay is a small Bukkit/Spigot plugin that relays encrypted chat fragments over the standard Plugin Messaging API. It does not inspect, encrypt, or decrypt the fragment body and does not require ProtocolLib or NMS.
+**Never use this project in production environments, and NEVER use it to protect sensitive, important, private, regulated, or high-value data. This project is not expected to receive active long-term maintenance, security response, or compatibility updates.**
 
-## Requirements
+Krypt04McgRelay is a Bukkit/Spigot plugin that privately relays Krypt04Mcg encrypted chat packets. When a player sends a matching encrypted fragment, the server cancels the normal chat broadcast, rebuilds the packet header, reads the target receiver, and forwards the original encrypted fragments only to that player.
 
-- Spigot API `26.2-R0.1-SNAPSHOT`
-- Java 25
-- A compatible Krypt04Mcg client mod
-
-## Wire format
-
-Channel: `krypt04mcg:chat_fragment`
-
-Client to server:
+The server console never prints the encrypted payload. It logs a localized summary such as:
 
 ```text
-receiver, fragment, version
+Alice 向 Bob 发送了加密消息。
 ```
 
-Server to client:
+## Supported Server
+
+- Built against Spigot API `26.2-R0.1-SNAPSHOT`.
+- Uses Java `25` because Minecraft/Spigot 26.2 requires Java 25 or later.
+- Requires ProtocolLib installed as a separate server plugin.
+- Uses Bukkit API plus ProtocolLib packet interception, no NMS or CraftBukkit internals.
+
+## Packet Format
+
+The plugin recognizes the fragment format used by the reference Krypt04Mcg client code:
 
 ```text
-sender, fragment, version
+[KRYPT04MCG] <messageId> <index> <total> <payload>
 ```
 
-Strings use Minecraft's UTF format: a VarInt byte length followed by UTF-8 bytes. The version is also a VarInt. Java's `DataInputStream.readUTF()` and `DataOutputStream.writeUTF()` are not compatible with this format.
+It waits until all fragments for the same sender and message id arrive, decodes the packet header, then routes the original fragment lines to the `receiver` stored in the encrypted packet metadata.
 
-The server never accepts a sender name from the client. It obtains the authenticated sender from Spigot's `PluginMessageListener` callback and rebuilds the clientbound payload with that name before forwarding it. Offline receivers and receivers that are not listening on the channel are ignored.
+Packet protocol versions `1`, `2`, and `3` are accepted. Protocol v3 no longer stores fragment metadata inside the encrypted packet, and omits KEM or signature algorithm identifiers when the packet type or flags do not use them; the relay handles both the legacy and current layouts.
+
+Forwarded fragments are sent to the receiver using the vanilla-style chat shape:
+
+```text
+<Alice> [KRYPT04MCG] <messageId> <index> <total> <payload>
+```
+
+This matches clients that parse incoming chat with:
+
+```regex
+^<(?<player>[^>]+)>\s*(?<message>.*)$
+```
+
+## Configuration
+
+`config.yml` is created on first run:
+
+```yaml
+language: zh_cn
+announce-plugin-installed: true
+echo-to-sender: false
+notify-offline-receiver: true
+notify-malformed-fragment: true
+enforce-sender-match: true
+kick-krypt04mcg-chat-spam: false
+fragment-timeout-seconds: 120
+max-pending-messages: 128
+max-fragments-per-message: 256
+```
+
+`kick-krypt04mcg-chat-spam` is `false` by default. When it is `false`, Krypt04Mcg fragments do not count toward Minecraft chat spam kicks; when it is `true`, Krypt04Mcg fragments use the normal spam kick behavior. Non-Krypt04Mcg chat is not changed by this option.
+
+The spam-kick bypass also covers Krypt04Mcg fragments sent through vanilla private-message commands (`/tell`, `/msg`, and `/w`). Other commands and ordinary private messages are not intercepted.
+
+ProtocolLib is declared as a `provided` dependency and is not bundled into the Krypt04McgRelay jar. For Minecraft/Spigot `26.2`, install the ProtocolLib GitHub `dev-build` separately in the server `plugins/` folder; the `5.4.0` release is not sufficient for this server version.
+
+Language files are also created in the plugin data folder:
+
+- `messages_zh_cn.yml`
+- `messages_en_us.yml`
+
+Set `language` to `zh_cn` or `en_us`, then run:
+
+```text
+/kryptrelay reload
+```
+
+Set `announce-plugin-installed` to `false` if you do not want players to receive the plugin-installed notice. The notice tells compatible mod users to enable "Shadow Listen Mode" / "影听模式".
 
 ## Build
+
+With Maven installed:
 
 ```bash
 mvn package
 ```
 
-The plugin jar is generated under `target/`.
+The plugin jar will be generated under `target/`.
 
 ## GitHub Actions
 
-The build workflow compiles pushes, pull requests, and manual runs, then uploads the generated jar. The release workflow builds tagged or manually requested releases and can sign artifacts when `RELEASE_SIGN_KEY` is configured.
+The repository includes a GitHub Actions workflow at `.github/workflows/build.yml`.
+It builds the plugin on pushes, pull requests, and manual runs, then uploads the generated jar as a workflow artifact.
+
+Release publishing is handled by `.github/workflows/release.yml`. Push a tag such as `v1.0.1`, or run the workflow manually, to build the plugin and create a GitHub Release. If the `RELEASE_SIGN_KEY` secret is configured with a PEM private key, release jars are signed and the public key is uploaded with the release assets.
 
 ## Install
 
-1. Put `target/Krypt04McgRelay-1.1.1.jar` in the server's `plugins/` directory.
-2. Restart the server.
-3. Connect with a compatible Krypt04Mcg client mod.
+1. Build the jar or use `target/Krypt04McgRelay-1.0.8.jar`.
+2. Put it into the server `plugins/` directory.
+3. Install the ProtocolLib GitHub `dev-build` separately in the server `plugins/` directory.
+4. Restart the server.
+5. Edit the generated config if needed.
+6. Run `/kryptrelay reload` after config or language changes.
+
+## Notes
+
+- This plugin is a relay only. It does not encrypt or decrypt message bodies.
+- The client-side Krypt04Mcg implementation must keep the packet header format compatible with the reference `PacketCodec`.
+- By default, the plugin rejects packets whose internal sender field does not match the player who sent the chat fragments.
 
 ## License
 
