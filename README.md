@@ -43,6 +43,8 @@ The plugin recognizes the fragment format used by the reference Krypt04Mcg clien
 
 It waits until all fragments for the same sender and message id arrive, decodes the packet header, then routes the original fragment lines to the `receiver` stored in the encrypted packet metadata.
 
+Packet protocol versions `1`, `2`, and `3` are accepted. Protocol v3 no longer stores fragment metadata inside the encrypted packet, and omits KEM or signature algorithm identifiers when the packet type or flags do not use them; the relay handles both the legacy and current layouts.
+
 Forwarded fragments are sent to the receiver using the vanilla-style chat shape:
 
 ```text

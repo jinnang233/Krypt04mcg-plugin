@@ -16,4 +16,7 @@ public record EncryptedPacket(
         byte[] ciphertext,
         byte[] signature
 ) {
+    public static final byte LEGACY_VERSION = 1;
+    public static final byte PREVIOUS_VERSION = 2;
+    public static final byte VERSION = 3;
 }

@@ -10,6 +10,7 @@ import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 
 public final class PacketCodec {
+    private static final byte FLAG_SIGNED = 0x01;
     private static final int MAX_STRING_BYTES = 4096;
     private static final int MAX_BYTES32_FIELD_BYTES = 1024 * 1024;
 
@@ -17,6 +18,11 @@ public final class PacketCodec {
         try {
             DataInputStream in = new DataInputStream(new ByteArrayInputStream(encoded));
             byte version = in.readByte();
+            if (version != EncryptedPacket.LEGACY_VERSION
+                    && version != EncryptedPacket.PREVIOUS_VERSION
+                    && version != EncryptedPacket.VERSION) {
+                throw new IOException("unsupported protocol version: " + Byte.toUnsignedInt(version));
+            }
             PacketType type = PacketType.fromId(in.readUnsignedByte());
             byte flags = in.readByte();
             String sender = readString(in);
@@ -26,9 +32,17 @@ public final class PacketCodec {
             if (messageId.length != 16) {
                 throw new IOException("truncated message id");
             }
-            short aadFragmentIndex = in.readShort();
-            short aadFragmentTotal = in.readShort();
-            AlgorithmSuite algorithms = new AlgorithmSuite(readString(in), readString(in), readString(in), readString(in));
+            short aadFragmentIndex = 0;
+            short aadFragmentTotal = 1;
+            if (version < EncryptedPacket.VERSION) {
+                aadFragmentIndex = in.readShort();
+                aadFragmentTotal = in.readShort();
+            }
+            String kem = version < EncryptedPacket.VERSION || usesKem(type) ? readString(in) : "NONE";
+            String signatureAlgorithm = version < EncryptedPacket.VERSION || isSigned(flags)
+                    ? readString(in)
+                    : "NONE";
+            AlgorithmSuite algorithms = new AlgorithmSuite(kem, signatureAlgorithm, readString(in), readString(in));
             byte[] nonce = readBytes16(in);
             byte[] kemCiphertext = readBytes32(in);
             byte[] ciphertext = readBytes32(in);
@@ -73,5 +87,13 @@ public final class PacketCodec {
             throw new IOException("truncated " + field);
         }
         return bytes;
+    }
+
+    private static boolean usesKem(PacketType type) {
+        return type != PacketType.SESSION_MESSAGE;
+    }
+
+    private static boolean isSigned(byte flags) {
+        return (flags & FLAG_SIGNED) != 0;
     }
 }
