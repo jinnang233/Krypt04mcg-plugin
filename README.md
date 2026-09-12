@@ -139,3 +139,9 @@ Each fragment contains `transferUUID:index:total:data` (zero-based index; at mos
 The server replaces peer with the authenticated sender name. Only the public-key channel accepts
 receiver `*` to broadcast to other online subscribers. Files are always directed to one receiver.
 The relay forwards opaque encrypted file data; client settings default to disabling file sending and receiving.
+
+The relay enforces per-source ingress budgets of 256 packets/second (512 burst) and 2 MiB/second (4 MiB burst).
+Outgoing bytes are charged for every recipient, including broadcasts: 8 MiB/second per source (32 MiB burst)
+and 32 MiB/second globally (64 MiB burst). Excess traffic is dropped without delivery acknowledgements;
+retry transfers that do not complete. Normal file transfers paced at four chunks per client tick fit these budgets.
+Malformed UTF-8 and overflowing VarInts are rejected. Malformed-packet diagnostics use fine-level logging.

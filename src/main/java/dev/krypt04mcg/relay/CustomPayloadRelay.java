@@ -16,6 +16,7 @@ final class CustomPayloadRelay implements PluginMessageListener {
     private static final int MAX_STRING_CHARS = 32767;
 
     private final Krypt04McgRelayPlugin plugin;
+    private final RelayTrafficLimiter traffic = new RelayTrafficLimiter();
 
     CustomPayloadRelay(Krypt04McgRelayPlugin plugin) {
         this.plugin = plugin;
@@ -42,6 +43,8 @@ final class CustomPayloadRelay implements PluginMessageListener {
         if (!CHANNELS.contains(channel)) {
             return;
         }
+        long now = System.nanoTime() / 1000000;
+        if (!traffic.receive(source.getUniqueId(), message.length, now)) return;
 
         try {
             ServerboundPayload payload = ServerboundPayload.decode(message);
@@ -52,6 +55,7 @@ final class CustomPayloadRelay implements PluginMessageListener {
                 byte[] outgoing = encodeClientbound(source.getName(), payload.fragment(), payload.version());
                 for (Player target : plugin.getServer().getOnlinePlayers()) {
                     if (!target.equals(source) && target.getListeningPluginChannels().contains(channel)) {
+                        if (!traffic.forward(source.getUniqueId(), outgoing.length, now)) break;
                         target.sendPluginMessage(plugin, channel, outgoing);
                     }
                 }
@@ -70,9 +74,10 @@ final class CustomPayloadRelay implements PluginMessageListener {
             // Never forward the client-supplied first field. The clientbound
             // sender identity must come from Bukkit's authenticated connection.
             byte[] outgoing = encodeClientbound(source.getName(), payload.fragment(), payload.version());
+            if (!traffic.forward(source.getUniqueId(), outgoing.length, now)) return;
             receiver.sendPluginMessage(plugin, channel, outgoing);
         } catch (IllegalArgumentException e) {
-            plugin.getLogger().warning("Rejected malformed " + CHANNEL + " payload from " + source.getName()
+            plugin.getLogger().fine("Rejected malformed " + channel + " payload from " + source.getName()
                     + ": " + e.getMessage());
         }
     }
@@ -140,7 +145,15 @@ final class CustomPayloadRelay implements PluginMessageListener {
                 throw new IllegalArgumentException("Invalid UTF-8 length");
             }
 
-            String value = new String(data, index, byteLength, StandardCharsets.UTF_8);
+            String value;
+            try {
+                value = StandardCharsets.UTF_8.newDecoder()
+                        .onMalformedInput(java.nio.charset.CodingErrorAction.REPORT)
+                        .onUnmappableCharacter(java.nio.charset.CodingErrorAction.REPORT)
+                        .decode(java.nio.ByteBuffer.wrap(data, index, byteLength)).toString();
+            } catch (java.nio.charset.CharacterCodingException e) {
+                throw new IllegalArgumentException("Invalid UTF-8", e);
+            }
             index += byteLength;
             if (value.length() > maxChars) {
                 throw new IllegalArgumentException("String is too long");
@@ -158,6 +171,7 @@ final class CustomPayloadRelay implements PluginMessageListener {
                 }
 
                 int current = data[index++] & 0xFF;
+                if (shift == 28 && (current & 0xF0) != 0) throw new IllegalArgumentException("VarInt overflow");
                 result |= (current & 0x7F) << shift;
                 if ((current & 0x80) == 0) {
                     return result;
