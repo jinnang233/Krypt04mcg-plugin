@@ -10,6 +10,8 @@ import java.nio.charset.StandardCharsets;
 final class CustomPayloadRelay implements PluginMessageListener {
     static final String CHANNEL = "krypt04mcg:chat_fragment";
 
+    private static final java.util.Set<String> CHANNELS = java.util.Set.of(CHANNEL, "krypt04mcg:public_key", "krypt04mcg:file_share");
+
     private static final int MAX_USERNAME_CHARS = 16;
     private static final int MAX_STRING_CHARS = 32767;
 
@@ -21,38 +23,54 @@ final class CustomPayloadRelay implements PluginMessageListener {
 
     void register() {
         Messenger messenger = plugin.getServer().getMessenger();
-        messenger.registerIncomingPluginChannel(plugin, CHANNEL, this);
-        messenger.registerOutgoingPluginChannel(plugin, CHANNEL);
+        for (String channel : CHANNELS) {
+            messenger.registerIncomingPluginChannel(plugin, channel, this);
+            messenger.registerOutgoingPluginChannel(plugin, channel);
+        }
     }
 
     void unregister() {
         Messenger messenger = plugin.getServer().getMessenger();
-        messenger.unregisterIncomingPluginChannel(plugin, CHANNEL, this);
-        messenger.unregisterOutgoingPluginChannel(plugin, CHANNEL);
+        for (String channel : CHANNELS) {
+            messenger.unregisterIncomingPluginChannel(plugin, channel, this);
+            messenger.unregisterOutgoingPluginChannel(plugin, channel);
+        }
     }
 
     @Override
     public void onPluginMessageReceived(String channel, Player source, byte[] message) {
-        if (!CHANNEL.equals(channel)) {
+        if (!CHANNELS.contains(channel)) {
             return;
         }
 
         try {
             ServerboundPayload payload = ServerboundPayload.decode(message);
+            if (!CHANNEL.equals(channel) && (payload.version() != 1 || payload.fragment().length() > 12100)) {
+                return;
+            }
+            if (channel.equals("krypt04mcg:public_key") && payload.receiver().equals("*")) {
+                byte[] outgoing = encodeClientbound(source.getName(), payload.fragment(), payload.version());
+                for (Player target : plugin.getServer().getOnlinePlayers()) {
+                    if (!target.equals(source) && target.getListeningPluginChannels().contains(channel)) {
+                        target.sendPluginMessage(plugin, channel, outgoing);
+                    }
+                }
+                return;
+            }
             Player receiver = plugin.getServer().getPlayerExact(payload.receiver());
             if (receiver == null || !receiver.isOnline()) {
                 plugin.getLogger().fine("Custom payload receiver offline: " + payload.receiver());
                 return;
             }
 
-            if (!receiver.getListeningPluginChannels().contains(CHANNEL)) {
+            if (!receiver.getListeningPluginChannels().contains(channel)) {
                 return;
             }
 
             // Never forward the client-supplied first field. The clientbound
             // sender identity must come from Bukkit's authenticated connection.
             byte[] outgoing = encodeClientbound(source.getName(), payload.fragment(), payload.version());
-            receiver.sendPluginMessage(plugin, CHANNEL, outgoing);
+            receiver.sendPluginMessage(plugin, channel, outgoing);
         } catch (IllegalArgumentException e) {
             plugin.getLogger().warning("Rejected malformed " + CHANNEL + " payload from " + source.getName()
                     + ": " + e.getMessage());
@@ -153,3 +171,4 @@ final class CustomPayloadRelay implements PluginMessageListener {
         }
     }
 }
+

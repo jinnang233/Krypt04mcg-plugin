@@ -23,7 +23,7 @@ Krypt04McgRelay is a Bukkit/Spigot plugin that privately relays Krypt04Mcg encry
 The server console never prints the encrypted payload. It logs a localized summary such as:
 
 ```text
-Alice 向 Bob 发送了加密消息。
+Alice sent an encrypted message to Bob.
 ```
 
 ## Supported Server
@@ -93,7 +93,7 @@ Set `language` to `zh_cn` or `en_us`, then run:
 /kryptrelay reload
 ```
 
-Set `announce-plugin-installed` to `false` if you do not want players to receive the plugin-installed notice. The notice tells compatible mod users to enable "Shadow Listen Mode" / "影听模式".
+Set `announce-plugin-installed` to `false` if you do not want players to receive the plugin-installed notice. The notice tells compatible mod users to enable "Shadow Listen Mode".
 
 ## Build
 
@@ -130,3 +130,12 @@ Release publishing is handled by `.github/workflows/release.yml`. Push a tag suc
 ## License
 
 This project is licensed under the Zero-Clause BSD license. See [LICENSE](LICENSE).
+
+### Optional public-key and file channels
+
+The relay additionally registers `krypt04mcg:public_key` and `krypt04mcg:file_share`.
+Both use the existing wire layout: Minecraft UTF peer, UTF fragment, VarInt version (1).
+Each fragment contains `transferUUID:index:total:data` (zero-based index; at most 12,100 characters including header).
+The server replaces peer with the authenticated sender name. Only the public-key channel accepts
+receiver `*` to broadcast to other online subscribers. Files are always directed to one receiver.
+The relay forwards opaque encrypted file data; client settings default to disabling file sending and receiving.
