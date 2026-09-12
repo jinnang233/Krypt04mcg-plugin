@@ -43,7 +43,9 @@ The plugin recognizes the fragment format used by the reference Krypt04Mcg clien
 
 It waits until all fragments for the same sender and message id arrive, decodes the packet header, then routes the original fragment lines to the `receiver` stored in the encrypted packet metadata.
 
-Packet protocol versions `1`, `2`, and `3` are accepted. Protocol v3 no longer stores fragment metadata inside the encrypted packet, and omits KEM or signature algorithm identifiers when the packet type or flags do not use them; the relay handles both the legacy and current layouts.
+Packet protocol versions `1`, `2`, `3`, and `4` are accepted. Protocol v3 no longer stores fragment metadata inside the encrypted packet, and omits KEM or signature algorithm identifiers when the packet type or flags do not use them. Protocol v4 session messages add a session ID and sequence number after the message ID and omit the signature field entirely. The relay handles all four packet types, including session exchanges and v4 session messages, while preserving the original encrypted fragments.
+
+The custom payload channel `krypt04mcg:chat_fragment` is also supported. Its wire format remains two Minecraft UTF-8 strings followed by a VarInt version: client-to-server sends `(receiver, fragment, version)`, and server-to-client sends `(sender, fragment, version)`. The relay obtains the sender from the authenticated player connection and forwards the fragment and version unchanged. The receiving client must be listening on this channel.
 
 Forwarded fragments are sent to the receiver using the vanilla-style chat shape:
 
