@@ -55,6 +55,8 @@ final class CustomPayloadRelay implements PluginMessageListener {
             if (channel.equals("krypt04mcg:public_key") && payload.receiver().equals("*")) {
                 byte[] outgoing = encodeClientbound(source.getName(), payload.fragment(), payload.version());
                 for (Player target : plugin.getServer().getOnlinePlayers()) {
+                    // Charge even non-subscribers: scanning them is still work on the server tick.
+                    if (!traffic.visitBroadcastRecipient(source.getUniqueId(), now)) break;
                     if (!target.equals(source) && target.getListeningPluginChannels().contains(channel)) {
                         if (!traffic.forward(source.getUniqueId(), outgoing.length, now)) break;
                         target.sendPluginMessage(plugin, channel, outgoing);
@@ -64,7 +66,7 @@ final class CustomPayloadRelay implements PluginMessageListener {
             }
             Player receiver = plugin.getServer().getPlayerExact(payload.receiver());
             if (receiver == null || !receiver.isOnline()) {
-                plugin.getLogger().fine("Custom payload receiver offline: " + payload.receiver());
+                plugin.getLogger().fine(() -> "Custom payload receiver offline: " + safeLogText(payload.receiver()));
                 return;
             }
 
@@ -78,9 +80,13 @@ final class CustomPayloadRelay implements PluginMessageListener {
             if (!traffic.forward(source.getUniqueId(), outgoing.length, now)) return;
             receiver.sendPluginMessage(plugin, channel, outgoing);
         } catch (IllegalArgumentException e) {
-            plugin.getLogger().fine("Rejected malformed " + channel + " payload from " + source.getName()
+            plugin.getLogger().fine(() -> "Rejected malformed " + channel + " payload from " + source.getName()
                     + ": " + e.getMessage());
         }
+    }
+
+    private static String safeLogText(String value) {
+        return value.replaceAll("[\\p{Cntrl}\\u2028\\u2029]", " ");
     }
 
     static byte[] encodeClientbound(String sender, String fragment, int version) {

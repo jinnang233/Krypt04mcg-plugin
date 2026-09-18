@@ -28,6 +28,7 @@ public final class EncryptedChatRelay implements Listener {
     private final PacketCodec packetCodec = new PacketCodec();
     private final FragmentCollector collector;
     private final BoundedInbox<Incoming> inbox = new BoundedInbox<>(1024);
+    private final FragmentOutbox<Player> outbox = new FragmentOutbox<>();
     private final RelayTrafficLimiter traffic = new RelayTrafficLimiter();
     private final BukkitTask pump;
     private volatile boolean closed;
@@ -69,9 +70,13 @@ public final class EncryptedChatRelay implements Listener {
         collector.cleanupTimedOut();
         long start = System.nanoTime();
         for (int i = 0; i < 64 && System.nanoTime() - start < 2_000_000; i++) {
+            // Interleave sends and receives so a large completion cannot monopolize a tick.
+            FragmentOutbox.Forward<Player> outgoing = outbox.poll(System.nanoTime());
+            if (outgoing != null) forward(outgoing);
+            if (System.nanoTime() - start >= 2_000_000) break;
             Incoming incoming = inbox.poll();
-            if (incoming == null) break;
-            if (incoming.sender().isOnline()) process(incoming.sender(), incoming.message());
+            if (incoming == null && outgoing == null) break;
+            if (incoming != null && incoming.sender().isOnline()) process(incoming.sender(), incoming.message());
         }
     }
 
@@ -95,6 +100,7 @@ public final class EncryptedChatRelay implements Listener {
     public synchronized void clear() {
         closed = true;
         inbox.close();
+        outbox.clear();
         pump.cancel();
         collector.clear();
         traffic.clear();
@@ -120,6 +126,7 @@ public final class EncryptedChatRelay implements Listener {
     @EventHandler
     public void onQuit(PlayerQuitEvent event) {
         collector.removeSender(event.getPlayer().getUniqueId());
+        outbox.removeParticipant(event.getPlayer());
     }
 
     private record Incoming(Player sender, String message) {}
@@ -146,17 +153,25 @@ public final class EncryptedChatRelay implements Listener {
                 targets.add(sender);
             }
 
-            for (String rawFragment : message.fragmentsInOrder()) {
-                String forwardedLine = vanillaChatLine(senderName, rawFragment);
-                for (Player target : targets) {
-                    if (!traffic.forward(sender.getUniqueId(), forwardedLine.length() * 3,
-                            System.nanoTime() / 1_000_000)) return;
-                    target.sendMessage(forwardedLine);
-                }
+            if (!outbox.offer(sender, targets, message.fragmentsInOrder(), System.nanoTime())) {
+                logRejected(senderName, "outgoing chat queue is full");
             }
-            plugin.getLogger().fine(messages.text("relay-log", "sender", senderName, "receiver", receiver.getName()));
         } catch (Exception e) {
             logRejected(senderName, e.getMessage());
+        }
+    }
+
+    private void forward(FragmentOutbox.Forward<Player> outgoing) {
+        Player sender = outgoing.sender();
+        Player target = outgoing.target();
+        if (!sender.isOnline() || !target.isOnline()) return;
+        try {
+            String line = vanillaChatLine(sender.getName(), outgoing.fragment());
+            if (traffic.forward(sender.getUniqueId(), line.length() * 3, System.nanoTime() / 1_000_000)) {
+                target.sendMessage(line);
+            }
+        } catch (RuntimeException e) {
+            logRejected(sender.getName(), e.getMessage());
         }
     }
 

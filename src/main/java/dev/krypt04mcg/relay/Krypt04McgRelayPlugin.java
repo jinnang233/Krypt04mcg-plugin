@@ -65,11 +65,12 @@ public final class Krypt04McgRelayPlugin extends JavaPlugin {
         relay = new EncryptedChatRelay(this, config, messages);
         getServer().getPluginManager().registerEvents(relay, this);
         if (getServer().getPluginManager().isPluginEnabled("ProtocolLib")) {
-            protocolLibChatInterceptor = new ProtocolLibChatInterceptor(this, config, relay);
+            protocolLibChatInterceptor = null;
             try {
+                protocolLibChatInterceptor = new ProtocolLibChatInterceptor(this, config, relay);
                 protocolLibChatInterceptor.register();
             } catch (RuntimeException | LinkageError e) {
-                protocolLibChatInterceptor.unregister();
+                if (protocolLibChatInterceptor != null) protocolLibChatInterceptor.unregister();
                 protocolLibChatInterceptor = null;
                 getLogger().warning("ProtocolLib packet interception is unavailable: " + e);
             }

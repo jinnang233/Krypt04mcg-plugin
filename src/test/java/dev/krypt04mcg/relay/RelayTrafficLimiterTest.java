@@ -5,6 +5,42 @@ import java.util.UUID;
 import static org.junit.jupiter.api.Assertions.*;
 
 class RelayTrafficLimiterTest {
+    @Test void tinyPacketsCannotBypassForwardingWorkBudget() {
+        var limiter = new RelayTrafficLimiter();
+        UUID sender = UUID.randomUUID();
+        assertTrue(limiter.receive(sender, 1, 0));
+        for (int i = 0; i < 4096; i++) assertTrue(limiter.forward(sender, 1, 0));
+        assertFalse(limiter.forward(sender, 1, 0));
+        assertTrue(limiter.forward(sender, 1, 1000));
+    }
+
+    @Test void totalForwardingWorkIsBoundedAcrossSources() {
+        var limiter = new RelayTrafficLimiter();
+        for (int source = 0; source < 4; source++) {
+            UUID sender = UUID.randomUUID();
+            assertTrue(limiter.receive(sender, 1, 0));
+            for (int i = 0; i < 4096; i++) assertTrue(limiter.forward(sender, 1, 0));
+        }
+        UUID sender = UUID.randomUUID();
+        assertTrue(limiter.receive(sender, 1, 0));
+        assertFalse(limiter.forward(sender, 1, 0));
+        assertTrue(limiter.forward(sender, 1, 1000));
+    }
+
+    @Test void broadcastScanningHasABudgetEvenWhenNobodySubscribes() {
+        var limiter = new RelayTrafficLimiter();
+        for (int source = 0; source < 4; source++) {
+            UUID sender = UUID.randomUUID();
+            assertTrue(limiter.receive(sender, 1, 0));
+            for (int i = 0; i < 4096; i++) assertTrue(limiter.visitBroadcastRecipient(sender, 0));
+            assertFalse(limiter.visitBroadcastRecipient(sender, 0));
+        }
+        UUID sender = UUID.randomUUID();
+        assertTrue(limiter.receive(sender, 1, 0));
+        assertFalse(limiter.visitBroadcastRecipient(sender, 0));
+        assertTrue(limiter.visitBroadcastRecipient(sender, 1000));
+    }
+
     @Test void aggregateIngressIsBoundedAcrossManySenders() {
         var limiter = new RelayTrafficLimiter();
         int accepted = 0;

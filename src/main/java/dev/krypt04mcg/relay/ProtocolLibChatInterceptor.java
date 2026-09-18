@@ -21,6 +21,8 @@ final class ProtocolLibChatInterceptor {
     private final Krypt04McgRelayPlugin plugin;
     private final RelayConfig config;
     private final EncryptedChatRelay relay;
+    private Runnable unregisterAction;
+    private volatile boolean active;
 
     ProtocolLibChatInterceptor(Krypt04McgRelayPlugin plugin, RelayConfig config, EncryptedChatRelay relay) {
         this.plugin = plugin;
@@ -29,12 +31,14 @@ final class ProtocolLibChatInterceptor {
     }
 
     void register() {
-        ProtocolLibrary.getProtocolManager().addPacketListener(new PacketAdapter(plugin, ListenerPriority.LOWEST,
+        var manager = ProtocolLibrary.getProtocolManager();
+        var listener = new PacketAdapter(plugin, ListenerPriority.LOWEST,
                 supportedClientMessagePackets()) {
             @Override
             public void onPacketReceiving(PacketEvent event) {
+                if (!active || config.kickKrypt04McgChatSpam()) return;
                 String message = readMessage(event);
-                if (message == null || config.kickKrypt04McgChatSpam()) {
+                if (message == null) {
                     return;
                 }
 
@@ -53,11 +57,22 @@ final class ProtocolLibChatInterceptor {
                 event.setCancelled(true);
                 relay.handleKrypt04McgMessage(sender, message);
             }
-        });
+        };
+        unregisterAction = () -> manager.removePacketListener(listener);
+        active = true;
+        manager.addPacketListener(listener);
     }
 
     void unregister() {
-        ProtocolLibrary.getProtocolManager().removePacketListeners(plugin);
+        active = false;
+        Runnable cleanup = unregisterAction;
+        unregisterAction = null;
+        if (cleanup == null) return;
+        try {
+            cleanup.run();
+        } catch (RuntimeException | LinkageError e) {
+            plugin.getLogger().warning("ProtocolLib listener cleanup failed: " + e);
+        }
     }
 
     private static List<PacketType> supportedClientMessagePackets() {

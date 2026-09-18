@@ -149,8 +149,11 @@ Malformed UTF-8 and overflowing VarInts are rejected. Malformed-packet diagnosti
 ### Resource limits
 
 Chat fragments use a 1,024-entry inbox instead of scheduling a task per packet. Each server tick
-processes at most 64 entries and checks a 2 ms elapsed-time budget between entries (a single message
-may take longer). Excess ingress is dropped. Reload and disable close the inbox and cancel its task.
+processes at most 64 incoming fragments and 64 outgoing sends, interleaving them and checking a shared
+2 ms elapsed-time budget between operations (one decode or send may take longer). Completed messages
+are sent incrementally from an outbox capped at 64 messages and 1,048,576 characters, with a 10-second
+delivery deadline. Excess ingress and overflowing or expired deliveries are dropped. Disconnects
+remove affected deliveries; reload and disable empty both queues and cancel the processing task.
 Incomplete messages expire from their first fragment using a monotonic clock, even when traffic stops;
 duplicates do not refresh that deadline. Disconnects release pending fragments. Fragment payloads and
 raw lines share a 4,194,304-character budget, in addition to the configured message and fragment limits.
@@ -158,6 +161,12 @@ The timeout is clamped to 5–3,600 seconds, and both count limits to 1–1,024.
 
 Chat and custom-payload transports each enforce aggregate ingress budgets of 2,048 packets/second
 (4,096 burst) and 8 MiB/second (16 MiB burst), as well as the per-source budgets above.
-Chat forwarding also charges outgoing byte budgets. Chat rejection warnings and related notifications
-are limited to once per second globally; successful chat relay logs use fine level.
+Each transport also caps outgoing sends at 2,048/second per source (4,096 burst) and 8,192/second
+globally (16,384 burst), in addition to outgoing byte budgets. Public-key broadcast candidate scans
+have separate budgets with those same limits, including candidates that do not subscribe.
+Chat rejection warnings and related notifications are limited to once per second globally.
 Clients should retry incomplete messages after overload has subsided.
+
+Missing custom language files fall back to English without interrupting reload. Language identifiers
+are limited to letters, digits and underscores after alias normalization; message placeholder values
+are inserted literally, without expanding embedded placeholders or `&` color codes.

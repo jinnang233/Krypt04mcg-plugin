@@ -10,6 +10,8 @@ final class RelayTrafficLimiter {
     private final Bucket egress = new Bucket(64 * 1024 * 1024, 32 * 1024 * 1024);
     private final Bucket ingressBytes = new Bucket(16 * 1024 * 1024, 8 * 1024 * 1024);
     private final Bucket ingressPackets = new Bucket(4096, 2048);
+    private final Bucket egressPackets = new Bucket(16384, 8192);
+    private final Bucket broadcastVisits = new Bucket(16384, 8192);
 
     synchronized boolean receive(UUID sender, int bytes, long now) {
         if (bytes < 0 || bytes > 100000) return false;
@@ -25,8 +27,15 @@ final class RelayTrafficLimiter {
     }
 
     synchronized boolean forward(UUID sender, int bytes, long now) {
+        if (bytes < 0) return false;
         Source source = sources.get(sender);
-        return source != null && source.egress.take(bytes, now) && egress.take(bytes, now);
+        return source != null && source.egressPackets.take(1, now) && egressPackets.take(1, now)
+                && source.egress.take(bytes, now) && egress.take(bytes, now);
+    }
+
+    synchronized boolean visitBroadcastRecipient(UUID sender, long now) {
+        Source source = sources.get(sender);
+        return source != null && source.broadcastVisits.take(1, now) && broadcastVisits.take(1, now);
     }
 
     synchronized void clear() {
@@ -38,6 +47,8 @@ final class RelayTrafficLimiter {
         final Bucket bytes = new Bucket(4 * 1024 * 1024, 2 * 1024 * 1024);
         final Bucket packets = new Bucket(512, 256);
         final Bucket egress = new Bucket(32 * 1024 * 1024, 8 * 1024 * 1024);
+        final Bucket egressPackets = new Bucket(4096, 2048);
+        final Bucket broadcastVisits = new Bucket(4096, 2048);
     }
 
     private static final class Bucket {
