@@ -23,11 +23,12 @@ enforce-sender-match: true
 # are still relayed privately, but they do not count toward chat spam kicks.
 kick-krypt04mcg-chat-spam: false
 
-# Drop incomplete encrypted messages after this many seconds.
+# Drop incomplete messages this many seconds after their first fragment (5..3600).
+# Duplicate fragments do not extend the deadline; cleanup runs even when idle.
 fragment-timeout-seconds: 120
 
-# Maximum number of encrypted messages kept in memory while waiting for fragments.
+# Maximum pending messages (1..1024); buffered fragment text also has a global cap.
 max-pending-messages: 128
 
-# Maximum fragments accepted for a single encrypted message.
+# Maximum fragments accepted for a single encrypted message (1..1024).
 max-fragments-per-message: 256

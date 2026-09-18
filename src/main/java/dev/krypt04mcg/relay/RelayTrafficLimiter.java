@@ -8,8 +8,10 @@ import java.util.UUID;
 final class RelayTrafficLimiter {
     private final Map<UUID, Source> sources = new HashMap<>();
     private final Bucket egress = new Bucket(64 * 1024 * 1024, 32 * 1024 * 1024);
+    private final Bucket ingressBytes = new Bucket(16 * 1024 * 1024, 8 * 1024 * 1024);
+    private final Bucket ingressPackets = new Bucket(4096, 2048);
 
-    boolean receive(UUID sender, int bytes, long now) {
+    synchronized boolean receive(UUID sender, int bytes, long now) {
         if (bytes < 0 || bytes > 100000) return false;
         Source source = sources.get(sender);
         if (source == null) {
@@ -18,12 +20,17 @@ final class RelayTrafficLimiter {
             source = new Source(); sources.put(sender, source);
         }
         source.lastSeen = now;
-        return source.packets.take(1, now) && source.bytes.take(bytes, now);
+        return source.packets.take(1, now) && source.bytes.take(bytes, now)
+                && ingressPackets.take(1, now) && ingressBytes.take(bytes, now);
     }
 
-    boolean forward(UUID sender, int bytes, long now) {
+    synchronized boolean forward(UUID sender, int bytes, long now) {
         Source source = sources.get(sender);
         return source != null && source.egress.take(bytes, now) && egress.take(bytes, now);
+    }
+
+    synchronized void clear() {
+        sources.clear();
     }
 
     private static final class Source {

@@ -23,7 +23,9 @@ public final class Krypt04McgRelayPlugin extends JavaPlugin {
     @Override
     public void onDisable() {
         if (relay != null) {
+            HandlerList.unregisterAll(relay);
             relay.clear();
+            relay = null;
         }
         if (protocolLibChatInterceptor != null) {
             protocolLibChatInterceptor.unregister();

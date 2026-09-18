@@ -6,7 +6,6 @@ import com.comphenix.protocol.events.ListenerPriority;
 import com.comphenix.protocol.events.PacketAdapter;
 import com.comphenix.protocol.events.PacketContainer;
 import com.comphenix.protocol.events.PacketEvent;
-import org.bukkit.Bukkit;
 import org.bukkit.entity.Player;
 
 import java.util.List;
@@ -51,9 +50,8 @@ final class ProtocolLibChatInterceptor {
                 }
 
                 Player sender = event.getPlayer();
-                String relayMessage = message;
                 event.setCancelled(true);
-                Bukkit.getScheduler().runTask(plugin, () -> relay.handleKrypt04McgMessage(sender, relayMessage));
+                relay.handleKrypt04McgMessage(sender, message);
             }
         });
     }
@@ -72,7 +70,8 @@ final class ProtocolLibChatInterceptor {
     }
 
     static String extractPrivateMessageBody(String command) {
-        if (command == null) {
+        // Bound regex work before vanilla validates an intercepted command packet.
+        if (command == null || command.length() > 512) {
             return null;
         }
         Matcher matcher = PRIVATE_MESSAGE_COMMAND.matcher(command);

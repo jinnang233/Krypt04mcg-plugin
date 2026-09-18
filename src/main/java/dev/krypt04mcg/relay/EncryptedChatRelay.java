@@ -13,6 +13,8 @@ import org.bukkit.event.EventPriority;
 import org.bukkit.event.Listener;
 import org.bukkit.event.player.AsyncPlayerChatEvent;
 import org.bukkit.event.player.PlayerJoinEvent;
+import org.bukkit.event.player.PlayerQuitEvent;
+import org.bukkit.scheduler.BukkitTask;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -25,6 +27,12 @@ public final class EncryptedChatRelay implements Listener {
     private final FragmentService fragmentService = new FragmentService();
     private final PacketCodec packetCodec = new PacketCodec();
     private final FragmentCollector collector;
+    private final BoundedInbox<Incoming> inbox = new BoundedInbox<>(1024);
+    private final RelayTrafficLimiter traffic = new RelayTrafficLimiter();
+    private final BukkitTask pump;
+    private volatile boolean closed;
+    private long lastRejection;
+    private boolean rejectionLogged;
 
     public EncryptedChatRelay(Krypt04McgRelayPlugin plugin, RelayConfig config, MessageBundle messages) {
         this.plugin = plugin;
@@ -32,6 +40,7 @@ public final class EncryptedChatRelay implements Listener {
         this.messages = messages;
         this.collector = new FragmentCollector(config.fragmentTimeout(), config.maxPendingMessages(),
                 config.maxFragmentsPerMessage());
+        pump = Bukkit.getScheduler().runTaskTimer(plugin, this::drain, 1L, 1L);
     }
 
     @EventHandler(priority = EventPriority.LOWEST, ignoreCancelled = true)
@@ -46,27 +55,49 @@ public final class EncryptedChatRelay implements Listener {
     }
 
     boolean isKrypt04McgMessage(String rawMessage) {
-        return fragmentService.extractFragmentLine(rawMessage).isPresent();
+        return rawMessage != null && rawMessage.contains(FragmentService.PREFIX);
     }
 
-    void handleKrypt04McgMessage(Player sender, String rawMessage) {
+    synchronized void handleKrypt04McgMessage(Player sender, String rawMessage) {
+        if (closed || rawMessage == null || rawMessage.length() > 512) return;
+        if (!traffic.receive(sender.getUniqueId(), rawMessage.length() * 3, System.nanoTime() / 1_000_000)) return;
+        inbox.offer(new Incoming(sender, rawMessage));
+    }
+
+    private void drain() {
+        if (closed) return;
+        collector.cleanupTimedOut();
+        long start = System.nanoTime();
+        for (int i = 0; i < 64 && System.nanoTime() - start < 2_000_000; i++) {
+            Incoming incoming = inbox.poll();
+            if (incoming == null) break;
+            if (incoming.sender().isOnline()) process(incoming.sender(), incoming.message());
+        }
+    }
+
+    private void process(Player sender, String rawMessage) {
         Optional<String> fragmentLine = fragmentService.extractFragmentLine(rawMessage);
         if (fragmentLine.isEmpty()) {
             return;
         }
         try {
-            collector.cleanupTimedOut();
             Fragment fragment = fragmentService.parse(fragmentLine.get());
             Optional<FragmentCollector.CompleteMessage> complete = collector.accept(sender.getUniqueId(), fragment,
                     fragmentLine.get());
-            complete.ifPresent(message -> routeOnMainThread(sender.getName(), message));
+            complete.ifPresent(message -> route(sender, message));
         } catch (Exception e) {
-            rejectOnMainThread(sender.getName(), e.getMessage(), config.notifyMalformedFragment());
+            if (logRejected(sender.getName(), e.getMessage()) && config.notifyMalformedFragment()) {
+                sender.sendMessage(ChatColor.RED + messages.text("sender-rejected", "reason", String.valueOf(e.getMessage())));
+            }
         }
     }
 
-    public void clear() {
+    public synchronized void clear() {
+        closed = true;
+        inbox.close();
+        pump.cancel();
         collector.clear();
+        traffic.clear();
     }
 
     public void announceToOnlinePlayers() {
@@ -83,26 +114,18 @@ public final class EncryptedChatRelay implements Listener {
         if (!config.announcePluginInstalled()) {
             return;
         }
-        Bukkit.getScheduler().runTaskLater(plugin, () -> sendPluginInstalledNotice(event.getPlayer()), 1L);
+        sendPluginInstalledNotice(event.getPlayer());
     }
 
-    private void routeOnMainThread(String senderName, FragmentCollector.CompleteMessage message) {
-        Bukkit.getScheduler().runTask(plugin, () -> route(senderName, message));
+    @EventHandler
+    public void onQuit(PlayerQuitEvent event) {
+        collector.removeSender(event.getPlayer().getUniqueId());
     }
 
-    private void rejectOnMainThread(String senderName, String reason, boolean notifySender) {
-        Bukkit.getScheduler().runTask(plugin, () -> {
-            logRejected(senderName, reason);
-            if (notifySender) {
-                Player sender = Bukkit.getPlayerExact(senderName);
-                if (sender != null) {
-                    sender.sendMessage(ChatColor.RED + messages.text("sender-rejected", "reason", reason));
-                }
-            }
-        });
-    }
+    private record Incoming(Player sender, String message) {}
 
-    private void route(String senderName, FragmentCollector.CompleteMessage message) {
+    private void route(Player sender, FragmentCollector.CompleteMessage message) {
+        String senderName = sender.getName();
         try {
             EncryptedPacket packet = packetCodec.decode(message.packetBytes());
             if (config.enforceSenderMatch() && !packet.sender().equalsIgnoreCase(senderName)) {
@@ -113,27 +136,25 @@ public final class EncryptedChatRelay implements Listener {
             Player receiver = Bukkit.getPlayerExact(packet.receiver());
             if (receiver == null) {
                 String reason = messages.text("reason-receiver-offline", "receiver", packet.receiver());
-                logRejected(senderName, reason);
-                notifyOffline(senderName, packet.receiver());
+                if (logRejected(senderName, reason)) notifyOffline(senderName, packet.receiver());
                 return;
             }
 
             List<Player> targets = new ArrayList<>();
             targets.add(receiver);
             if (config.echoToSender() && !receiver.getName().equalsIgnoreCase(senderName)) {
-                Player sender = Bukkit.getPlayerExact(senderName);
-                if (sender != null) {
-                    targets.add(sender);
-                }
+                targets.add(sender);
             }
 
             for (String rawFragment : message.fragmentsInOrder()) {
                 String forwardedLine = vanillaChatLine(senderName, rawFragment);
                 for (Player target : targets) {
+                    if (!traffic.forward(sender.getUniqueId(), forwardedLine.length() * 3,
+                            System.nanoTime() / 1_000_000)) return;
                     target.sendMessage(forwardedLine);
                 }
             }
-            plugin.getLogger().info(messages.text("relay-log", "sender", senderName, "receiver", receiver.getName()));
+            plugin.getLogger().fine(messages.text("relay-log", "sender", senderName, "receiver", receiver.getName()));
         } catch (Exception e) {
             logRejected(senderName, e.getMessage());
         }
@@ -149,8 +170,14 @@ public final class EncryptedChatRelay implements Listener {
         }
     }
 
-    private void logRejected(String senderName, String reason) {
-        plugin.getLogger().warning(messages.text("reject-log", "sender", senderName, "reason", reason));
+    private boolean logRejected(String senderName, String reason) {
+        long now = System.nanoTime();
+        if (rejectionLogged && now - lastRejection < 1_000_000_000L) return false;
+        rejectionLogged = true;
+        lastRejection = now;
+        String safeReason = String.valueOf(reason).replaceAll("[\\p{Cntrl}\\u2028\\u2029]", " ");
+        plugin.getLogger().warning(messages.text("reject-log", "sender", senderName, "reason", safeReason));
+        return true;
     }
 
     private void sendPluginInstalledNotice(Player player) {

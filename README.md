@@ -145,3 +145,19 @@ Outgoing bytes are charged for every recipient, including broadcasts: 8 MiB/seco
 and 32 MiB/second globally (64 MiB burst). Excess traffic is dropped without delivery acknowledgements;
 retry transfers that do not complete. Normal file transfers paced at four chunks per client tick fit these budgets.
 Malformed UTF-8 and overflowing VarInts are rejected. Malformed-packet diagnostics use fine-level logging.
+
+### Resource limits
+
+Chat fragments use a 1,024-entry inbox instead of scheduling a task per packet. Each server tick
+processes at most 64 entries and checks a 2 ms elapsed-time budget between entries (a single message
+may take longer). Excess ingress is dropped. Reload and disable close the inbox and cancel its task.
+Incomplete messages expire from their first fragment using a monotonic clock, even when traffic stops;
+duplicates do not refresh that deadline. Disconnects release pending fragments. Fragment payloads and
+raw lines share a 4,194,304-character budget, in addition to the configured message and fragment limits.
+The timeout is clamped to 5–3,600 seconds, and both count limits to 1–1,024.
+
+Chat and custom-payload transports each enforce aggregate ingress budgets of 2,048 packets/second
+(4,096 burst) and 8 MiB/second (16 MiB burst), as well as the per-source budgets above.
+Chat forwarding also charges outgoing byte budgets. Chat rejection warnings and related notifications
+are limited to once per second globally; successful chat relay logs use fine level.
+Clients should retry incomplete messages after overload has subsided.

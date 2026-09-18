@@ -31,6 +31,7 @@ final class CustomPayloadRelay implements PluginMessageListener {
     }
 
     void unregister() {
+        traffic.clear();
         Messenger messenger = plugin.getServer().getMessenger();
         for (String channel : CHANNELS) {
             messenger.unregisterIncomingPluginChannel(plugin, channel, this);

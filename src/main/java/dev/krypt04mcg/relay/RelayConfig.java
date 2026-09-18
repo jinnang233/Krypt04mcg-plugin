@@ -25,9 +25,9 @@ public record RelayConfig(
                 plugin.getConfig().getBoolean("notify-malformed-fragment", true),
                 plugin.getConfig().getBoolean("enforce-sender-match", true),
                 plugin.getConfig().getBoolean("kick-krypt04mcg-chat-spam", false),
-                Duration.ofSeconds(Math.max(5, plugin.getConfig().getLong("fragment-timeout-seconds", 120))),
-                Math.max(1, plugin.getConfig().getInt("max-pending-messages", 128)),
-                Math.max(1, plugin.getConfig().getInt("max-fragments-per-message", 256))
+                Duration.ofSeconds(Math.clamp(plugin.getConfig().getLong("fragment-timeout-seconds", 120), 5, 3600)),
+                Math.clamp(plugin.getConfig().getInt("max-pending-messages", 128), 1, 1024),
+                Math.clamp(plugin.getConfig().getInt("max-fragments-per-message", 256), 1, 1024)
         );
     }
 }
