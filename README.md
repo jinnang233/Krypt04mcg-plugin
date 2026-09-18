@@ -28,9 +28,9 @@ Alice sent an encrypted message to Bob.
 
 ## Supported Server
 
-- Built against Spigot API `26.2-R0.1-SNAPSHOT`.
-- Uses Java `25` because Minecraft/Spigot 26.2 requires Java 25 or later.
-- Requires ProtocolLib installed as a separate server plugin.
+- Built against Spigot API `26.3-R0.1-SNAPSHOT`.
+- Uses Java `25` for Minecraft/Spigot 26.3.
+- ProtocolLib is optional for the chat spam-kick bypass. The chat relay and custom payload channels work without it.
 - Uses Bukkit API plus ProtocolLib packet interception, no NMS or CraftBukkit internals.
 
 ## Packet Format
@@ -80,7 +80,7 @@ max-fragments-per-message: 256
 
 The spam-kick bypass also covers Krypt04Mcg fragments sent through vanilla private-message commands (`/tell`, `/msg`, and `/w`). Other commands and ordinary private messages are not intercepted.
 
-ProtocolLib is declared as a `provided` dependency and is not bundled into the Krypt04McgRelay jar. For Minecraft/Spigot `26.2`, install the ProtocolLib GitHub `dev-build` separately in the server `plugins/` folder; the `5.4.0` release is not sufficient for this server version.
+ProtocolLib is declared as a `provided` dependency and is not bundled into the Krypt04McgRelay jar. For Minecraft/Spigot `26.2`, use a compatible GitHub development build. ProtocolLib's published source still lists `26.2` as its highest tested version, so packet interception on `26.3` is not yet verified. Without an enabled, compatible ProtocolLib build, the relay still handles ordinary chat and custom payloads, but cannot bypass vanilla chat spam kicks for encrypted fragments or private-message commands.
 
 Language files are also created in the plugin data folder:
 
@@ -114,9 +114,9 @@ Release publishing is handled by `.github/workflows/release.yml`. Push a tag suc
 
 ## Install
 
-1. Build the jar or use `target/Krypt04McgRelay-1.0.8.jar`.
+1. Build the jar or download it from a release.
 2. Put it into the server `plugins/` directory.
-3. Install the ProtocolLib GitHub `dev-build` separately in the server `plugins/` directory.
+3. To enable the chat spam-kick bypass, install a ProtocolLib build compatible with your server in the `plugins/` directory.
 4. Restart the server.
 5. Edit the generated config if needed.
 6. Run `/kryptrelay reload` after config or language changes.

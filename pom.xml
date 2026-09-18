@@ -33,11 +33,11 @@
         <dependency>
             <groupId>org.spigotmc</groupId>
             <artifactId>spigot-api</artifactId>
-            <version>26.2-R0.1-SNAPSHOT</version>
+            <version>26.3-R0.1-SNAPSHOT</version>
             <scope>provided</scope>
         </dependency>
         <dependency>
-            <!-- Compile against the latest Maven Central API; run 26.2 servers with the GitHub dev-build installed. -->
+            <!-- Compile against the published API; packet interception needs a compatible runtime build. -->
             <groupId>net.dmulloy2</groupId>
             <artifactId>ProtocolLib</artifactId>
             <version>5.4.0</version>

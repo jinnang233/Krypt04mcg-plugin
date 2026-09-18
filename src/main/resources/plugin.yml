@@ -4,7 +4,7 @@ main: dev.krypt04mcg.relay.Krypt04McgRelayPlugin
 api-version: '1.21'
 author: Krypt04Mcg
 description: Directed relay for Krypt04Mcg encrypted chat packets.
-depend:
+softdepend:
   - ProtocolLib
 commands:
   kryptrelay:

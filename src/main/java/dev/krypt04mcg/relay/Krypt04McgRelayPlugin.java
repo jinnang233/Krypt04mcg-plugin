@@ -62,8 +62,19 @@ public final class Krypt04McgRelayPlugin extends JavaPlugin {
         }
         relay = new EncryptedChatRelay(this, config, messages);
         getServer().getPluginManager().registerEvents(relay, this);
-        protocolLibChatInterceptor = new ProtocolLibChatInterceptor(this, config, relay);
-        protocolLibChatInterceptor.register();
+        if (getServer().getPluginManager().isPluginEnabled("ProtocolLib")) {
+            protocolLibChatInterceptor = new ProtocolLibChatInterceptor(this, config, relay);
+            try {
+                protocolLibChatInterceptor.register();
+            } catch (RuntimeException | LinkageError e) {
+                protocolLibChatInterceptor.unregister();
+                protocolLibChatInterceptor = null;
+                getLogger().warning("ProtocolLib packet interception is unavailable: " + e);
+            }
+        } else {
+            protocolLibChatInterceptor = null;
+            getLogger().warning("ProtocolLib is unavailable; encrypted chat relay remains active, but the chat spam-kick bypass is disabled.");
+        }
         customPayloadRelay = new CustomPayloadRelay(this);
         customPayloadRelay.register();
         relay.announceToOnlinePlayers();
