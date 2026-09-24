@@ -129,7 +129,7 @@ Release publishing is handled by `.github/workflows/release.yml`. Push a tag suc
 
 ## License
 
-This project is licensed under the Zero-Clause BSD license. See [LICENSE](LICENSE).
+This project is licensed under the The Unlicense. See [LICENSE](LICENSE).
 
 ### Optional public-key and file channels
 
