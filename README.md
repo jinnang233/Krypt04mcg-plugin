@@ -47,7 +47,7 @@ Packet protocol versions `1`, `2`, `3`, and `4` are accepted. Protocol v3 no lon
 
 The custom payload channel `krypt04mcg:chat_fragment` is also supported. Its wire format remains two Minecraft UTF-8 strings followed by a VarInt version: client-to-server sends `(receiver, fragment, version)`, and server-to-client sends `(sender, fragment, version)`. The relay obtains the sender from the authenticated player connection and forwards the fragment and version unchanged. The receiving client must be listening on this channel.
 
-Forwarded fragments are sent to the receiver using the vanilla-style chat shape:
+Fragments forwarded through the vanilla chat transport use this chat shape:
 
 ```text
 <Alice> [KRYPT04MCG] <messageId> <index> <total> <payload>
@@ -145,6 +145,37 @@ Outgoing bytes are charged for every recipient, including broadcasts: 8 MiB/seco
 and 32 MiB/second globally (64 MiB burst). Excess traffic is dropped without delivery acknowledgements;
 retry transfers that do not complete. Normal file transfers paced at four chunks per client tick fit these budgets.
 Malformed UTF-8 and overflowing VarInts are rejected. Malformed-packet diagnostics use fine-level logging.
+
+### Binary data API channel (client 0.17.0; relay 1.6.0)
+
+The relay registers `krypt04mcg:data` for incoming and outgoing plugin messages,
+and unregisters it with the other payload channels on reload or disable.
+Its wire format matches `file_share`, in this exact order:
+
+1. `peer`: Minecraft `writeUtf(peer, 16)`.
+2. `fragment`: Minecraft `writeUtf(fragment, 12100)`.
+3. `version`: Minecraft `writeVarInt(1)`; only version `1` is supported.
+
+Strings use standard UTF-8 bytes prefixed by a VarInt byte length, **not** Java
+`DataOutputStream.writeUTF`. Both the UTF-16 character limit and the UTF-8 byte
+limit (three times the character limit) are checked. Truncation, invalid UTF-8,
+invalid/overflowing VarInts, trailing bytes and unsupported versions are rejected.
+
+Client-to-server `peer` selects the destination player. Server-to-client `peer`
+is replaced with the real name of the authenticated sending connection;
+`fragment` and `version` are preserved. Only that online player, subscribed to
+`krypt04mcg:data`, receives the message. There is no broadcast (including `*`),
+chat fallback, or requirement to subscribe to chat/file channels. Data forwarding
+is independent of file-sharing settings.
+
+The fragment is an opaque encrypted envelope fragment: the server does not add
+chat prefixes, validate file content, assemble fragments, encrypt/decrypt, or
+read application bytes. The business channel is inside the encrypted envelope
+and is distinct from the Minecraft payload channel. The client handles encryption,
+signatures, fragmentation, decryption and business-channel dispatch.
+
+Data traffic shares the existing custom-payload ingress and outgoing budgets
+described above and below; it has no separate quota or delivery acknowledgements.
 
 ### Resource limits
 

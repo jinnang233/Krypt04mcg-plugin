@@ -1,6 +1,7 @@
 package dev.krypt04mcg.relay;
 
 import org.bukkit.entity.Player;
+import org.bukkit.plugin.Plugin;
 import org.bukkit.plugin.messaging.Messenger;
 import org.bukkit.plugin.messaging.PluginMessageListener;
 
@@ -9,16 +10,18 @@ import java.nio.charset.StandardCharsets;
 
 final class CustomPayloadRelay implements PluginMessageListener {
     static final String CHANNEL = "krypt04mcg:chat_fragment";
+    static final String DATA_CHANNEL = "krypt04mcg:data";
 
-    private static final java.util.Set<String> CHANNELS = java.util.Set.of(CHANNEL, "krypt04mcg:public_key", "krypt04mcg:file_share");
+    private static final java.util.Set<String> CHANNELS = java.util.Set.of(CHANNEL, "krypt04mcg:public_key", "krypt04mcg:file_share", DATA_CHANNEL);
 
     private static final int MAX_USERNAME_CHARS = 16;
     private static final int MAX_STRING_CHARS = 32767;
+    private static final int MAX_OPTIONAL_FRAGMENT_CHARS = 12100;
 
-    private final Krypt04McgRelayPlugin plugin;
+    private final Plugin plugin;
     private final RelayTrafficLimiter traffic = new RelayTrafficLimiter();
 
-    CustomPayloadRelay(Krypt04McgRelayPlugin plugin) {
+    CustomPayloadRelay(Plugin plugin) {
         this.plugin = plugin;
     }
 
@@ -48,8 +51,9 @@ final class CustomPayloadRelay implements PluginMessageListener {
         if (!traffic.receive(source.getUniqueId(), message.length, now)) return;
 
         try {
-            ServerboundPayload payload = ServerboundPayload.decode(message);
-            if (!CHANNEL.equals(channel) && (payload.version() != 1 || payload.fragment().length() > 12100)) {
+            ServerboundPayload payload = ServerboundPayload.decode(message,
+                    CHANNEL.equals(channel) ? MAX_STRING_CHARS : MAX_OPTIONAL_FRAGMENT_CHARS);
+            if (!CHANNEL.equals(channel) && payload.version() != 1) {
                 return;
             }
             if (channel.equals("krypt04mcg:public_key") && payload.receiver().equals("*")) {
@@ -64,6 +68,8 @@ final class CustomPayloadRelay implements PluginMessageListener {
                 }
                 return;
             }
+            // Data envelopes are opaque: no business-channel parsing, chat prefix,
+            // file validation or file/chat subscription dependency. Only public keys broadcast.
             Player receiver = plugin.getServer().getPlayerExact(payload.receiver());
             if (receiver == null || !receiver.isOnline()) {
                 plugin.getLogger().fine(() -> "Custom payload receiver offline: " + safeLogText(payload.receiver()));
@@ -125,9 +131,13 @@ final class CustomPayloadRelay implements PluginMessageListener {
 
     record ServerboundPayload(String receiver, String fragment, int version) {
         static ServerboundPayload decode(byte[] data) {
+            return decode(data, MAX_STRING_CHARS);
+        }
+
+        static ServerboundPayload decode(byte[] data, int maxFragmentChars) {
             PayloadReader reader = new PayloadReader(data);
             String receiver = reader.readUtf(MAX_USERNAME_CHARS);
-            String fragment = reader.readUtf(MAX_STRING_CHARS);
+            String fragment = reader.readUtf(maxFragmentChars);
             int version = reader.readVarInt();
 
             if (!reader.finished() || version <= 0) {
