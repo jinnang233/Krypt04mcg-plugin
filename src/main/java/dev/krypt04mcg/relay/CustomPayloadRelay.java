@@ -50,11 +50,14 @@ final class CustomPayloadRelay implements PluginMessageListener {
             return;
         }
         long now = System.nanoTime() / 1000000;
-        if (!traffic.receive(source.getUniqueId(), message.length, now)) return;
+        // API transfers are paced by the clients/transport. Dropping a tunnel frame
+        // breaks its ordered stream; these channels must not consume legacy quotas.
+        boolean api = DATA_CHANNEL.equals(channel) || TUNNEL_CHANNEL.equals(channel);
+        if (message.length > 100000 || (!api && !traffic.receive(source.getUniqueId(), message.length, now))) return;
 
         try {
             if (TUNNEL_CHANNEL.equals(channel)) {
-                relayTunnel(source, message, now);
+                relayTunnel(source, message);
                 return;
             }
             ServerboundPayload payload = ServerboundPayload.decode(message,
@@ -89,7 +92,7 @@ final class CustomPayloadRelay implements PluginMessageListener {
             // Never forward the client-supplied first field. The clientbound
             // sender identity must come from Bukkit's authenticated connection.
             byte[] outgoing = encodeClientbound(source.getName(), payload.fragment(), payload.version());
-            if (!traffic.forward(source.getUniqueId(), outgoing.length, now)) return;
+            if (!api && !traffic.forward(source.getUniqueId(), outgoing.length, now)) return;
             receiver.sendPluginMessage(plugin, channel, outgoing);
         } catch (IllegalArgumentException e) {
             plugin.getLogger().fine(() -> "Rejected malformed " + channel + " payload from " + source.getName()
@@ -97,7 +100,7 @@ final class CustomPayloadRelay implements PluginMessageListener {
         }
     }
 
-    private void relayTunnel(Player source, byte[] message, long now) {
+    private void relayTunnel(Player source, byte[] message) {
         PayloadReader reader = new PayloadReader(message);
         String peer = reader.readUtf(MAX_USERNAME_CHARS);
         int length = reader.readVarInt();
@@ -113,7 +116,6 @@ final class CustomPayloadRelay implements PluginMessageListener {
         writeVarInt(output, length);
         output.write(message, reader.index, length);
         byte[] outgoing = output.toByteArray();
-        if (!traffic.forward(source.getUniqueId(), outgoing.length, now)) return;
         receiver.sendPluginMessage(plugin, TUNNEL_CHANNEL, outgoing);
     }
 

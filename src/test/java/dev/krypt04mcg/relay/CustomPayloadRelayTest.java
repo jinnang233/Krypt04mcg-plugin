@@ -165,6 +165,23 @@ class CustomPayloadRelayTest {
         return output.toByteArray();
     }
 
+    @Test void apiBurstsAreLosslessAndIndependentOfLegacyQuotas() {
+        player("Bob", true, Set.of(TUNNEL, DATA, CustomPayloadRelay.CHANNEL));
+        byte[] legacy = packet("Bob", "x", 1);
+        // Exhaust the old per-source packet budget before starting API traffic.
+        for (int i = 0; i < 600; i++) relay.onPluginMessageReceived(CustomPayloadRelay.CHANNEL, source, legacy);
+        deliveries.clear();
+        byte[] binary = tunnel("Bob", new byte[24576]);
+        byte[] data = packet("Bob", "x".repeat(12100), 1);
+        for (int i = 0; i < 2048; i++) {
+            relay.onPluginMessageReceived(TUNNEL, source, binary);
+            relay.onPluginMessageReceived(DATA, source, data);
+            assertEquals(2, deliveries.size(), "API packet lost at " + i);
+            assertArrayEquals(tunnel("Alice", new byte[24576]), deliveries.getFirst().bytes());
+            deliveries.clear();
+        }
+    }
+
     private Player player(String name, boolean online, Set<String> channels) {
         UUID id = UUID.randomUUID();
         Player player = proxy(Player.class, (p, method, args) -> switch (method.getName()) {

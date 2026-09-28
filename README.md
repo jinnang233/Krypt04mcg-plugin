@@ -140,7 +140,7 @@ The server replaces peer with the authenticated sender name. Only the public-key
 receiver `*` to broadcast to other online subscribers. Files are always directed to one receiver.
 The relay forwards opaque encrypted file data; client settings default to disabling file sending and receiving.
 
-The relay enforces per-source ingress budgets of 256 packets/second (512 burst) and 2 MiB/second (4 MiB burst).
+Legacy chat, public-key and file channels enforce per-source ingress budgets of 256 packets/second (512 burst) and 2 MiB/second (4 MiB burst).
 Outgoing bytes are charged for every recipient, including broadcasts: 8 MiB/second per source (32 MiB burst)
 and 32 MiB/second globally (64 MiB burst). Excess traffic is dropped without delivery acknowledgements;
 retry transfers that do not complete. Normal file transfers paced at four chunks per client tick fit these budgets.
@@ -174,8 +174,7 @@ read application bytes. The business channel is inside the encrypted envelope
 and is distinct from the Minecraft payload channel. The client handles encryption,
 signatures, fragmentation, decryption and business-channel dispatch.
 
-Data traffic shares the existing custom-payload ingress and outgoing budgets
-described above and below; it has no separate quota or delivery acknowledgements.
+Data and tunnel traffic bypass the legacy packet/byte drop quotas in both directions, so client pacing and ordered stream delivery are not disrupted. They do not consume chat, public-key or file budgets. Payload size and wire validation still apply; only public keys can broadcast.
 
 ### Resource limits
 
@@ -190,7 +189,7 @@ duplicates do not refresh that deadline. Disconnects release pending fragments. 
 raw lines share a 4,194,304-character budget, in addition to the configured message and fragment limits.
 The timeout is clamped to 5–3,600 seconds, and both count limits to 1–1,024.
 
-Chat and custom-payload transports each enforce aggregate ingress budgets of 2,048 packets/second
+Chat and legacy custom-payload transports each enforce aggregate ingress budgets of 2,048 packets/second
 (4,096 burst) and 8 MiB/second (16 MiB burst), as well as the per-source budgets above.
 Each transport also caps outgoing sends at 2,048/second per source (4,096 burst) and 8,192/second
 globally (16,384 burst), in addition to outgoing byte budgets. Public-key broadcast candidate scans
@@ -201,3 +200,19 @@ Clients should retry incomplete messages after overload has subsided.
 Missing custom language files fall back to English without interrupting reload. Language identifiers
 are limited to letters, digits and underscores after alias normalization; message placeholder values
 are inserted literally, without expanding embedded placeholders or `&` color codes.
+
+### Socket tunnel (Krypt04Mcg 0.22.0)
+
+The relay advertises `krypt04mcg:tunnel` on registration, including after reload.
+The layout is Minecraft UTF peer (16 characters), VarInt envelope byte length,
+then up to 24 KiB of opaque binary envelope. There is no outer version field.
+The authenticated source name replaces peer; only the named online subscriber
+receives the unchanged envelope. Truncated, oversized or trailing data is rejected.
+No cryptography, stream counters or encrypted metadata are modified by the relay.
+
+The tunnel has no relay drop-based rate quota or application retry queue. Bukkit
+forwards each accepted packet immediately in callback order. Client socket queues
+and the TCP transport provide flow control; Bukkit/server outbound buffering and
+server-wide packet limits still apply. This does not impose a bounded server queue
+or guarantee throughput under a slow receiver or server overload. Configure server
+network limits for expected traffic rather than silently discarding tunnel frames.
