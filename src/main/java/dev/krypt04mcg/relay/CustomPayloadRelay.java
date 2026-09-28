@@ -11,8 +11,10 @@ import java.nio.charset.StandardCharsets;
 final class CustomPayloadRelay implements PluginMessageListener {
     static final String CHANNEL = "krypt04mcg:chat_fragment";
     static final String DATA_CHANNEL = "krypt04mcg:data";
+    static final String TUNNEL_CHANNEL = "krypt04mcg:tunnel";
+    private static final int MAX_TUNNEL_BYTES = 24 * 1024;
 
-    private static final java.util.Set<String> CHANNELS = java.util.Set.of(CHANNEL, "krypt04mcg:public_key", "krypt04mcg:file_share", DATA_CHANNEL);
+    private static final java.util.Set<String> CHANNELS = java.util.Set.of(CHANNEL, "krypt04mcg:public_key", "krypt04mcg:file_share", DATA_CHANNEL, TUNNEL_CHANNEL);
 
     private static final int MAX_USERNAME_CHARS = 16;
     private static final int MAX_STRING_CHARS = 32767;
@@ -51,6 +53,10 @@ final class CustomPayloadRelay implements PluginMessageListener {
         if (!traffic.receive(source.getUniqueId(), message.length, now)) return;
 
         try {
+            if (TUNNEL_CHANNEL.equals(channel)) {
+                relayTunnel(source, message, now);
+                return;
+            }
             ServerboundPayload payload = ServerboundPayload.decode(message,
                     CHANNEL.equals(channel) ? MAX_STRING_CHARS : MAX_OPTIONAL_FRAGMENT_CHARS);
             if (!CHANNEL.equals(channel) && payload.version() != 1) {
@@ -89,6 +95,26 @@ final class CustomPayloadRelay implements PluginMessageListener {
             plugin.getLogger().fine(() -> "Rejected malformed " + channel + " payload from " + source.getName()
                     + ": " + e.getMessage());
         }
+    }
+
+    private void relayTunnel(Player source, byte[] message, long now) {
+        PayloadReader reader = new PayloadReader(message);
+        String peer = reader.readUtf(MAX_USERNAME_CHARS);
+        int length = reader.readVarInt();
+        if (length < 0 || length > MAX_TUNNEL_BYTES || length != message.length - reader.index) {
+            throw new IllegalArgumentException("Invalid tunnel envelope length");
+        }
+        // No broadcast or envelope inspection: authentication remains end-to-end.
+        Player receiver = plugin.getServer().getPlayerExact(peer);
+        if (receiver == null || !receiver.isOnline()
+                || !receiver.getListeningPluginChannels().contains(TUNNEL_CHANNEL)) return;
+        ByteArrayOutputStream output = new ByteArrayOutputStream();
+        writeUtf(output, source.getName(), MAX_USERNAME_CHARS);
+        writeVarInt(output, length);
+        output.write(message, reader.index, length);
+        byte[] outgoing = output.toByteArray();
+        if (!traffic.forward(source.getUniqueId(), outgoing.length, now)) return;
+        receiver.sendPluginMessage(plugin, TUNNEL_CHANNEL, outgoing);
     }
 
     private static String safeLogText(String value) {

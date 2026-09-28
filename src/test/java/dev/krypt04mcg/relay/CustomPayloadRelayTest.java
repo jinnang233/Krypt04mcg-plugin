@@ -17,6 +17,7 @@ import static org.junit.jupiter.api.Assertions.*;
 
 class CustomPayloadRelayTest {
     private static final String DATA = "krypt04mcg:data";
+    private static final String TUNNEL = "krypt04mcg:tunnel";
     private final Map<String, Player> players = new HashMap<>();
     private final List<Delivery> deliveries = new ArrayList<>();
     private final Set<String> incoming = new HashSet<>(), outgoing = new HashSet<>();
@@ -111,7 +112,7 @@ class CustomPayloadRelayTest {
     }
 
     @Test void registersAndUnregistersDataWithExistingChannels() {
-        Set<String> expected = Set.of(DATA, CustomPayloadRelay.CHANNEL,
+        Set<String> expected = Set.of(DATA, TUNNEL, CustomPayloadRelay.CHANNEL,
                 "krypt04mcg:public_key", "krypt04mcg:file_share");
         relay.register();
         assertEquals(expected, incoming);
@@ -122,6 +123,46 @@ class CustomPayloadRelayTest {
         relay.register();
         assertEquals(expected, incoming);
         assertEquals(expected, outgoing);
+    }
+
+    @Test void forwardsBinaryTunnelUnchangedWithAuthenticatedSender() {
+        player("Bob", true, Set.of(TUNNEL));
+        byte[] envelope = new byte[24 * 1024];
+        new Random(42).nextBytes(envelope);
+        relay.onPluginMessageReceived(TUNNEL, source, tunnel("Bob", envelope));
+        assertEquals(1, deliveries.size());
+        assertEquals(TUNNEL, deliveries.getFirst().channel());
+        assertArrayEquals(tunnel("Alice", envelope), deliveries.getFirst().bytes());
+    }
+
+    @Test void rejectsMalformedTunnelAndDoesNotUseOtherSubscriptions() {
+        player("Bob", true, Set.of(TUNNEL));
+        player("DataOnly", true, Set.of(DATA));
+        player("Offline", false, Set.of(TUNNEL));
+        byte[] valid = tunnel("Bob", new byte[] {0, (byte) 255, 7});
+        for (byte[] message : List.of(new byte[0], Arrays.copyOf(valid, valid.length - 1),
+                Arrays.copyOf(valid, valid.length + 1), tunnel("Bob", new byte[24577]),
+                tunnel("B".repeat(17), new byte[1]),
+                new byte[] {3, 'B', 'o', 'b', (byte) 255, (byte) 255, (byte) 255, (byte) 255, 0x10},
+                new byte[] {1, (byte) 255, 0}, packet("Bob", "old layout", 1))) {
+            relay.onPluginMessageReceived(TUNNEL, source, message);
+        }
+        for (String peer : List.of("*", "Missing", "Offline", "DataOnly")) {
+            relay.onPluginMessageReceived(TUNNEL, source, tunnel(peer, new byte[1]));
+        }
+        assertTrue(deliveries.isEmpty());
+        relay.onPluginMessageReceived(TUNNEL, source, valid);
+        assertEquals(1, deliveries.size());
+    }
+
+    private static byte[] tunnel(String peer, byte[] envelope) {
+        ByteArrayOutputStream output = new ByteArrayOutputStream();
+        byte[] name = peer.getBytes(StandardCharsets.UTF_8);
+        varInt(output, name.length);
+        output.writeBytes(name);
+        varInt(output, envelope.length);
+        output.writeBytes(envelope);
+        return output.toByteArray();
     }
 
     private Player player(String name, boolean online, Set<String> channels) {
