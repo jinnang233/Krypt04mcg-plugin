@@ -1,5 +1,14 @@
 # Krypt04McgRelay
 
+> [!WARNING]
+> **This repository is archived and no longer maintained.**
+>
+> It is preserved here for historical and reference purposes only. No further
+> updates, bug fixes, or support will be provided. Issues and pull requests
+> will not be reviewed.
+>
+> If you wish to continue development, please fork this repository.
+
 [![Build](https://github.com/jinnang233/Krypt04mcg-plugin/actions/workflows/build.yml/badge.svg)](https://github.com/jinnang233/Krypt04mcg-plugin/actions/workflows/build.yml)[![Build and Release](https://github.com/jinnang233/Krypt04mcg-plugin/actions/workflows/release.yml/badge.svg)](https://github.com/jinnang233/Krypt04mcg-plugin/actions/workflows/release.yml)[![CodeQL](https://github.com/jinnang233/Krypt04mcg-plugin/actions/workflows/github-code-scanning/codeql/badge.svg)](https://github.com/jinnang233/Krypt04mcg-plugin/actions/workflows/github-code-scanning/codeql)
 
 > [!WARNING]
