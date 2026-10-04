@@ -208,6 +208,11 @@ are inserted literally, without expanding embedded placeholders or `&` color cod
 `krypt04mcg_stream:data/0` through `krypt04mcg_stream:data/(n-1)`.
 An array maps each slot to one pair of players. Allocation selects a free slot
 subscribed to by both players; the server's pool is shared by all players.
+Each data channel has its own callback bound to a fixed array slot and cached
+channel name. Control messages update the routing array; data callbacks only read
+that slot, check the sender and direction, and forward the original bytes. They
+do not parse channel strings, query subscriptions, look up players/UUIDs/maps, or
+allocate envelopes. Subscription removal and disconnect events clear routes.
 Configure the client's `apiChannelCount` as well to make additional slots usable.
 
 The relay uses the client's existing `krypt04mcg_stream:control` protocol for

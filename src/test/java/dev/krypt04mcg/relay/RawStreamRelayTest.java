@@ -3,12 +3,15 @@ package dev.krypt04mcg.relay;
 import org.bukkit.Server;
 import org.bukkit.entity.Player;
 import org.bukkit.event.player.PlayerQuitEvent;
+import org.bukkit.event.player.PlayerUnregisterChannelEvent;
 import org.bukkit.plugin.Plugin;
 import org.bukkit.plugin.PluginManager;
 import org.bukkit.plugin.messaging.Messenger;
+import org.bukkit.plugin.messaging.PluginMessageListener;
 import org.bukkit.scheduler.BukkitScheduler;
 import org.bukkit.scheduler.BukkitTask;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.BeforeEach;
 
 import java.io.ByteArrayOutputStream;
 import java.io.DataOutputStream;
@@ -25,13 +28,21 @@ class RawStreamRelayTest {
     private final Map<String, Player> players = new HashMap<>();
     private final List<Delivery> deliveries = new ArrayList<>();
     private final Set<String> incoming = new HashSet<>(), outgoing = new HashSet<>();
+    private final Map<String, PluginMessageListener> listeners = new HashMap<>();
+    private boolean dataOnly;
     private boolean cancelled;
     private boolean enabled = true;
     private final Messenger messenger = proxy(Messenger.class, (p, m, a) -> {
         switch (m.getName()) {
-            case "registerIncomingPluginChannel" -> incoming.add((String) a[1]);
+            case "registerIncomingPluginChannel" -> {
+                incoming.add((String) a[1]);
+                listeners.put((String) a[1], (PluginMessageListener) a[2]);
+            }
             case "registerOutgoingPluginChannel" -> outgoing.add((String) a[1]);
-            case "unregisterIncomingPluginChannel" -> incoming.remove((String) a[1]);
+            case "unregisterIncomingPluginChannel" -> {
+                incoming.remove((String) a[1]);
+                assertSame(listeners.remove((String) a[1]), a[2]);
+            }
             case "unregisterOutgoingPluginChannel" -> outgoing.remove((String) a[1]);
             default -> throw new AssertionError(m);
         }
@@ -64,6 +75,51 @@ class RawStreamRelayTest {
     private final Player bob = player("Bob", Set.of(CONTROL, DATA_PREFIX + 0, DATA_PREFIX + 1));
     private final UUID id = UUID.randomUUID();
 
+    @BeforeEach void registerChannels() { relay.register(); }
+
+    private void receive(String channel, Player source, byte[] bytes) {
+        PluginMessageListener listener = listeners.get(channel);
+        if (listener != null) listener.onPluginMessageReceived(channel, source, bytes);
+    }
+
+    @Test void boundDataCallbackDoesNotInspectChannelOrQueryPlayerMetadata() throws Exception {
+        open(id); control(bob, 3, "Alice", id, 0); deliveries.clear();
+        PluginMessageListener first = listeners.get(DATA_PREFIX + 0);
+        assertNotSame(first, listeners.get(DATA_PREFIX + 1));
+        assertNotSame(first, listeners.get(CONTROL));
+        byte[] raw = new byte[]{0, -1, 42};
+        dataOnly = true;
+        try {
+            // The messenger already selected the callback; it must not parse this argument.
+            first.onPluginMessageReceived(null, alice, raw);
+            first.onPluginMessageReceived(null, bob, raw);
+        } finally {
+            dataOnly = false;
+        }
+        assertEquals(List.of("Bob", "Alice"), deliveries.stream().map(Delivery::target).toList());
+        for (Delivery delivery : deliveries) {
+            assertEquals(DATA_PREFIX + 0, delivery.channel);
+            assertSame(raw, delivery.bytes);
+        }
+    }
+
+    @Test void subscriptionRemovalImmediatelyClearsOnlyAffectedRoutes() throws Exception {
+        open(id); control(bob, 3, "Alice", id, 0);
+        UUID second = UUID.randomUUID(); open(second); control(bob, 3, "Alice", second, 1);
+        relay.onUnregisterChannel(new PlayerUnregisterChannelEvent(bob, DATA_PREFIX + 0));
+        deliveries.clear();
+        receive(DATA_PREFIX + 0, alice, new byte[16]);
+        assertTrue(deliveries.isEmpty());
+        receive(DATA_PREFIX + 1, alice, new byte[16]);
+        assertEquals(1, deliveries.size());
+        relay.onUnregisterChannel(new PlayerUnregisterChannelEvent(bob, CONTROL));
+        deliveries.clear();
+        receive(DATA_PREFIX + 1, alice, new byte[16]);
+        assertTrue(deliveries.isEmpty());
+        open(UUID.randomUUID());
+        assertEquals(0, StreamControl.decode(deliveries.getFirst().bytes).slot());
+    }
+
     @Test void allocatesCommonSlotAndForwardsTheExactRawArrayBothWays() throws Exception {
         Player receiver = player("Bob", Set.of(CONTROL, DATA_PREFIX + 1));
         open(id);
@@ -71,11 +127,11 @@ class RawStreamRelayTest {
         assertControl(1, "Bob", 1, "Alice", id, 1);
         deliveries.clear();
         byte[] raw = new byte[16400]; new Random(42).nextBytes(raw);
-        relay.onPluginMessageReceived(DATA_PREFIX + 1, alice, raw);
+        receive(DATA_PREFIX + 1, alice, raw);
         assertTrue(deliveries.isEmpty());
         control(receiver, 3, "Alice", id, 1); deliveries.clear();
-        relay.onPluginMessageReceived(DATA_PREFIX + 1, alice, raw);
-        relay.onPluginMessageReceived(DATA_PREFIX + 1, receiver, raw);
+        receive(DATA_PREFIX + 1, alice, raw);
+        receive(DATA_PREFIX + 1, receiver, raw);
         assertEquals(List.of("Bob", "Alice"), deliveries.stream().map(Delivery::target).toList());
         for (Delivery d : deliveries) {
             assertEquals(DATA_PREFIX + 1, d.channel);
@@ -86,7 +142,7 @@ class RawStreamRelayTest {
     @Test void blocksUnrelatedPlayersAndForgedLifecycleMessages() throws Exception {
         Player eve = player("Eve", Set.of(CONTROL, DATA_PREFIX + 0));
         open(id); control(alice, 3, "Bob", id, 0); deliveries.clear();
-        relay.onPluginMessageReceived(DATA_PREFIX + 0, alice, new byte[16]);
+        receive(DATA_PREFIX + 0, alice, new byte[16]);
         assertTrue(deliveries.isEmpty()); // Only the receiver may send READY.
         control(bob, 3, "Alice", id, 0); deliveries.clear();
         control(eve, 5, "Alice", id, 0);
@@ -94,19 +150,19 @@ class RawStreamRelayTest {
         control(alice, 2, "Bob", id, 0);
         control(bob, 5, "Alice", UUID.randomUUID(), 0);
         control(bob, 5, "Eve", id, 0);
-        relay.onPluginMessageReceived(DATA_PREFIX + 0, eve, new byte[16]);
-        relay.onPluginMessageReceived(DATA_PREFIX + "00", alice, new byte[16]);
+        receive(DATA_PREFIX + 0, eve, new byte[16]);
+        receive(DATA_PREFIX + "00", alice, new byte[16]);
         assertTrue(deliveries.isEmpty());
-        relay.onPluginMessageReceived(DATA_PREFIX + 0, alice, new byte[16]);
+        receive(DATA_PREFIX + 0, alice, new byte[16]);
         assertEquals(1, deliveries.size());
     }
 
     @Test void endIsDirectionalAndBothEndsReleaseTheSlot() throws Exception {
         open(id); control(bob, 3, "Alice", id, 0); control(alice, 4, "Bob", id, 0);
         deliveries.clear();
-        relay.onPluginMessageReceived(DATA_PREFIX + 0, alice, new byte[16]);
+        receive(DATA_PREFIX + 0, alice, new byte[16]);
         assertTrue(deliveries.isEmpty());
-        relay.onPluginMessageReceived(DATA_PREFIX + 0, bob, new byte[16]);
+        receive(DATA_PREFIX + 0, bob, new byte[16]);
         assertEquals(1, deliveries.size());
         control(bob, 4, "Alice", id, 0); deliveries.clear();
         UUID next = UUID.randomUUID(); open(next);
@@ -137,17 +193,17 @@ class RawStreamRelayTest {
     }
 
     @Test void exchangePreservesBodyAndUsesAuthenticatedSource() throws Exception {
-        relay.onPluginMessageReceived(CONTROL, alice, packet(0, "Bob", id, -1, new byte[30000]));
+        receive(CONTROL, alice, packet(0, "Bob", id, -1, new byte[30000]));
         assertArrayEquals(packet(0, "Alice", id, -1, new byte[30000]), deliveries.getFirst().bytes);
     }
 
     @Test void malformedControlsCannotAllocate() throws Exception {
         byte[] valid = packet(1, "Bob", id, -1, new byte[32]);
         for (int length = 0; length < valid.length; length++)
-            relay.onPluginMessageReceived(CONTROL, alice, Arrays.copyOf(valid, length));
-        relay.onPluginMessageReceived(CONTROL, alice, Arrays.copyOf(valid, valid.length + 1));
-        relay.onPluginMessageReceived(CONTROL, alice, packet(99, "Bob", id, -1, new byte[32]));
-        relay.onPluginMessageReceived(CONTROL, alice, packet(1, "Bob", id, -1, new byte[31]));
+            receive(CONTROL, alice, Arrays.copyOf(valid, length));
+        receive(CONTROL, alice, Arrays.copyOf(valid, valid.length + 1));
+        receive(CONTROL, alice, packet(99, "Bob", id, -1, new byte[32]));
+        receive(CONTROL, alice, packet(1, "Bob", id, -1, new byte[31]));
         assertTrue(deliveries.isEmpty());
     }
 
@@ -157,8 +213,8 @@ class RawStreamRelayTest {
         for (int size : new int[]{0, 1, 15, 16, 16400, 16401, 24577, 100001}) {
             byte[] bytes = new byte[size];
             random.nextBytes(bytes);
-            relay.onPluginMessageReceived(DATA_PREFIX + 0, alice, bytes);
-            relay.onPluginMessageReceived(DATA_PREFIX + 0, bob, bytes);
+            receive(DATA_PREFIX + 0, alice, bytes);
+            receive(DATA_PREFIX + 0, bob, bytes);
             assertEquals(2, deliveries.size());
             assertEquals(List.of("Bob", "Alice"), deliveries.stream().map(Delivery::target).toList());
             for (Delivery delivery : deliveries) {
@@ -175,8 +231,8 @@ class RawStreamRelayTest {
         byte[][] records = {new byte[16400], new byte[16399], new byte[16]};
         for (int i = 0; i < 8192; i++) {
             byte[] bytes = records[i % records.length];
-            relay.onPluginMessageReceived(DATA_PREFIX + 0, alice, bytes);
-            relay.onPluginMessageReceived(DATA_PREFIX + 0, bob, bytes);
+            receive(DATA_PREFIX + 0, alice, bytes);
+            receive(DATA_PREFIX + 0, bob, bytes);
             assertEquals(2, deliveries.size());
             for (int j = 0; j < 2; j++) {
                 Delivery d = deliveries.get(j);
@@ -199,7 +255,7 @@ class RawStreamRelayTest {
         open(id); control(bob, 3, "Alice", id, 0); deliveries.clear();
         byte[] bytes = new byte[16400];
         for (int i = 0; i < 4096; i++) {
-            relay.onPluginMessageReceived(DATA_PREFIX + 0, alice, bytes);
+            receive(DATA_PREFIX + 0, alice, bytes);
             assertEquals(1, deliveries.size());
             assertEquals(DATA_PREFIX + 0, deliveries.getFirst().channel);
             deliveries.clear();
@@ -208,7 +264,7 @@ class RawStreamRelayTest {
         assertControl(0, "Alice", 2, "Bob", second, 1);
         control(bob, 3, "Alice", second, 1); deliveries.clear();
         for (int slot = 0; slot < 2; slot++) {
-            relay.onPluginMessageReceived(DATA_PREFIX + slot, alice, bytes);
+            receive(DATA_PREFIX + slot, alice, bytes);
             assertEquals(DATA_PREFIX + slot, deliveries.get(slot).channel);
             assertSame(bytes, deliveries.get(slot).bytes);
         }
@@ -244,7 +300,7 @@ class RawStreamRelayTest {
 
     private void open(UUID stream) throws Exception { control(alice, 1, "Bob", stream, -1); }
     private void control(Player source, int kind, String peer, UUID stream, int slot) throws Exception {
-        relay.onPluginMessageReceived(CONTROL, source, packet(kind, peer, stream, slot, new byte[32]));
+        receive(CONTROL, source, packet(kind, peer, stream, slot, new byte[32]));
     }
     private void assertControl(int index, String target, int kind, String peer, UUID stream, int slot) throws Exception {
         Delivery d = deliveries.get(index);
@@ -268,13 +324,17 @@ class RawStreamRelayTest {
     }
     private Player player(String name, Set<String> channels) {
         UUID uuid = UUID.randomUUID();
-        Player player = proxy(Player.class, (p, m, a) -> switch (m.getName()) {
+        Player player = proxy(Player.class, (p, m, a) -> {
+            if (dataOnly && !m.getName().equals("sendPluginMessage"))
+                throw new AssertionError("Data queried player metadata: " + m.getName());
+            return switch (m.getName()) {
             case "getName" -> name;
             case "getUniqueId" -> uuid;
             case "isOnline" -> true;
             case "getListeningPluginChannels" -> channels;
             case "sendPluginMessage" -> { deliveries.add(new Delivery(name, (String) a[1], (byte[]) a[2])); yield null; }
             default -> throw new AssertionError(m);
+        };
         });
         players.put(name, player); return player;
     }
