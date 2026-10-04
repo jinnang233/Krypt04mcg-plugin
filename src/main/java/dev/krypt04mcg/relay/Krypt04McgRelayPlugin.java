@@ -10,6 +10,7 @@ public final class Krypt04McgRelayPlugin extends JavaPlugin {
     private EncryptedChatRelay relay;
     private ProtocolLibChatInterceptor protocolLibChatInterceptor;
     private CustomPayloadRelay customPayloadRelay;
+    private RawStreamRelay rawStreamRelay;
     private MessageBundle messages;
 
     @Override
@@ -22,6 +23,10 @@ public final class Krypt04McgRelayPlugin extends JavaPlugin {
 
     @Override
     public void onDisable() {
+        if (rawStreamRelay != null) {
+            rawStreamRelay.unregister();
+            rawStreamRelay = null;
+        }
         if (relay != null) {
             HandlerList.unregisterAll(relay);
             relay.clear();
@@ -50,6 +55,7 @@ public final class Krypt04McgRelayPlugin extends JavaPlugin {
     }
 
     private void reloadRelay() {
+        if (rawStreamRelay != null) rawStreamRelay.unregister();
         RelayConfig config = RelayConfig.from(this);
         messages = MessageBundle.load(this, config.language());
         if (relay != null) {
@@ -80,6 +86,8 @@ public final class Krypt04McgRelayPlugin extends JavaPlugin {
         }
         customPayloadRelay = new CustomPayloadRelay(this);
         customPayloadRelay.register();
+        rawStreamRelay = new RawStreamRelay(this, getConfig().getInt("api-channel-count", 16));
+        rawStreamRelay.register();
         relay.announceToOnlinePlayers();
     }
 }

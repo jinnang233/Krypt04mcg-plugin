@@ -135,7 +135,7 @@ final class CustomPayloadRelay implements PluginMessageListener {
         return output.toByteArray();
     }
 
-    private static void writeUtf(ByteArrayOutputStream output, String value, int maxChars) {
+    static void writeUtf(ByteArrayOutputStream output, String value, int maxChars) {
         if (value.length() > maxChars) {
             throw new IllegalArgumentException("String is too long");
         }
@@ -149,7 +149,7 @@ final class CustomPayloadRelay implements PluginMessageListener {
         output.write(bytes, 0, bytes.length);
     }
 
-    private static void writeVarInt(ByteArrayOutputStream output, int value) {
+    static void writeVarInt(ByteArrayOutputStream output, int value) {
         while ((value & ~0x7F) != 0) {
             output.write((value & 0x7F) | 0x80);
             value >>>= 7;
@@ -176,15 +176,15 @@ final class CustomPayloadRelay implements PluginMessageListener {
         }
     }
 
-    private static final class PayloadReader {
+    static final class PayloadReader {
         private final byte[] data;
         private int index;
 
-        private PayloadReader(byte[] data) {
+        PayloadReader(byte[] data) {
             this.data = data;
         }
 
-        private String readUtf(int maxChars) {
+        String readUtf(int maxChars) {
             int byteLength = readVarInt();
             if (byteLength < 0 || byteLength > maxChars * 3 || byteLength > data.length - index) {
                 throw new IllegalArgumentException("Invalid UTF-8 length");
@@ -206,7 +206,7 @@ final class CustomPayloadRelay implements PluginMessageListener {
             return value;
         }
 
-        private int readVarInt() {
+        int readVarInt() {
             int result = 0;
             int shift = 0;
 
@@ -225,9 +225,15 @@ final class CustomPayloadRelay implements PluginMessageListener {
             }
         }
 
-        private boolean finished() {
+        byte[] readBytes(int length) {
+            if (length < 0 || length > data.length - index) throw new IllegalArgumentException("Invalid byte length");
+            byte[] bytes = java.util.Arrays.copyOfRange(data, index, index + length);
+            index += length;
+            return bytes;
+        }
+
+        boolean finished() {
             return index == data.length;
         }
     }
 }
-

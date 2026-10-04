@@ -1,6 +1,10 @@
 # Language file under the plugin data folder. Built-in values: en_us, zh_cn.
 language: zh_cn
 
+# Pre-register krypt04mcg_stream:data/0 through data/(n-1), clamped to 1..256.
+# Each slot relays one pair of players. Reload aborts active streams.
+api-channel-count: 16
+
 # Tell players that this server has Krypt04McgRelay installed and remind
 # compatible mod users to enable Shadow Listen Mode.
 announce-plugin-installed: true
