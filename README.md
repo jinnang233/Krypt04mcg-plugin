@@ -220,9 +220,13 @@ the same channel, without encoding, decoding, encryption or decryption.
 Data is forwarded only between the assigned players after READY and before that
 sender's END. Both ENDs, RESET, disconnect, lost subscription or 60 seconds of
 inactivity release the slot. Reload applies the configured count and aborts active
-streams. Raw streams have separate traffic budgets using the per-source and
-aggregate ingress limits described above; exceeding a budget aborts affected
-streams instead of silently dropping records from a live stream.
+streams. Raw data records bypass relay packet/byte rate quotas and are forwarded
+immediately in callback order, preserving client pacing and transport flow control.
+Bulk transfers do not consume the separate control-message ingress budget, so a
+download cannot exhaust the budget needed for END, RESET or opening another stream.
+Malformed records still abort the affected stream; control-message floods retain
+the per-source and aggregate ingress limits described above. Server outbound
+buffering and server-wide network limits still apply, as with socket tunnels below.
 
 ### Socket tunnel (Krypt04Mcg 0.22.0)
 

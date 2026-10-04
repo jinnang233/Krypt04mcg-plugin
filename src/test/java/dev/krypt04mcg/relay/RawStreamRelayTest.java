@@ -156,12 +156,52 @@ class RawStreamRelayTest {
         }
     }
 
-    @Test void trafficOverloadAbortsRatherThanSilentlyLosingRecords() throws Exception {
+    @Test void bulkDownloadPreservesEveryRecordAndCanCloseAndReopen() throws Exception {
+        open(id); control(bob, 3, "Alice", id, 0); deliveries.clear();
+        // More than the old byte and packet burst budgets, in both directions.
+        byte[][] records = {new byte[16400], new byte[16399], new byte[16]};
+        for (int i = 0; i < 8192; i++) {
+            byte[] bytes = records[i % records.length];
+            relay.onPluginMessageReceived(DATA_PREFIX + 0, alice, bytes);
+            relay.onPluginMessageReceived(DATA_PREFIX + 0, bob, bytes);
+            assertEquals(2, deliveries.size());
+            for (int j = 0; j < 2; j++) {
+                Delivery d = deliveries.get(j);
+                assertEquals(j == 0 ? "Bob" : "Alice", d.target);
+                assertEquals(DATA_PREFIX + 0, d.channel);
+                assertSame(bytes, d.bytes);
+            }
+            deliveries.clear();
+        }
+        control(alice, 4, "Bob", id, 0);
+        assertControl(0, "Bob", 4, "Alice", id, 0);
+        control(bob, 4, "Alice", id, 0);
+        assertControl(1, "Alice", 4, "Bob", id, 0);
+        deliveries.clear();
+        UUID next = UUID.randomUUID(); open(next);
+        assertControl(0, "Alice", 2, "Bob", next, 0);
+    }
+
+    @Test void downloadDoesNotExhaustControlBudgetOrInterruptAnotherStream() throws Exception {
         open(id); control(bob, 3, "Alice", id, 0); deliveries.clear();
         byte[] bytes = new byte[16400];
-        for (int i = 0; i < 1000; i++) relay.onPluginMessageReceived(DATA_PREFIX + 0, alice, bytes);
-        assertTrue(deliveries.stream().anyMatch(d -> d.channel.equals(CONTROL)
-                && StreamControl.decode(d.bytes).kind() == StreamControl.Kind.ABORT));
+        for (int i = 0; i < 4096; i++) {
+            relay.onPluginMessageReceived(DATA_PREFIX + 0, alice, bytes);
+            assertEquals(1, deliveries.size());
+            assertEquals(DATA_PREFIX + 0, deliveries.getFirst().channel);
+            deliveries.clear();
+        }
+        UUID second = UUID.randomUUID(); open(second);
+        assertControl(0, "Alice", 2, "Bob", second, 1);
+        control(bob, 3, "Alice", second, 1); deliveries.clear();
+        for (int slot = 0; slot < 2; slot++) {
+            relay.onPluginMessageReceived(DATA_PREFIX + slot, alice, bytes);
+            assertEquals(DATA_PREFIX + slot, deliveries.get(slot).channel);
+            assertSame(bytes, deliveries.get(slot).bytes);
+        }
+        deliveries.clear();
+        control(alice, 5, "Bob", second, 1);
+        assertControl(0, "Bob", 5, "Alice", second, 1);
     }
 
     @Test void registrationHonorsCountAndReloadClearsRoutes() throws Exception {

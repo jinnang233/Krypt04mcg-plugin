@@ -17,7 +17,7 @@ final class RawStreamRelay implements PluginMessageListener, Listener {
     static final String DATA_PREFIX = "krypt04mcg_stream:data/";
     private final Plugin plugin;
     private final Route[] routes;
-    private final RelayTrafficLimiter traffic = new RelayTrafficLimiter();
+    private final RelayTrafficLimiter controlTraffic = new RelayTrafficLimiter();
     private BukkitTask cleanup;
 
     RawStreamRelay(Plugin plugin, int count) {
@@ -44,14 +44,14 @@ final class RawStreamRelay implements PluginMessageListener, Listener {
             plugin.getServer().getMessenger().unregisterIncomingPluginChannel(plugin, channel, this);
             plugin.getServer().getMessenger().unregisterOutgoingPluginChannel(plugin, channel);
         }
-        traffic.clear();
+        controlTraffic.clear();
     }
 
     @Override
     public void onPluginMessageReceived(String channel, Player source, byte[] bytes) {
         long now = now();
         if (CONTROL.equals(channel)) {
-            if (bytes.length > 31104 || !traffic.receive(source.getUniqueId(), bytes.length, now)) {
+            if (bytes.length > 31104 || !controlTraffic.receive(source.getUniqueId(), bytes.length, now)) {
                 disconnect(source);
                 return;
             }
@@ -67,12 +67,13 @@ final class RawStreamRelay implements PluginMessageListener, Listener {
         Route route = routes[slot];
         if (route == null || !route.contains(source) || !route.ready || route.ended(source)) return;
         Player target = route.other(source);
-        if (bytes.length < 16 || bytes.length > 16400 || !supports(target, channel)
-                || !traffic.receive(source.getUniqueId(), bytes.length, now)
-                || !traffic.forward(source.getUniqueId(), bytes.length, now)) {
+        if (bytes.length < 16 || bytes.length > 16400 || !supports(target, channel)) {
             release(slot); // Losing a record must fail the stream, never masquerade as EOF.
             return;
         }
+        // Ordered stream records cannot be dropped or aborted to enforce a rate quota.
+        // Client pacing and transport flow control govern bulk data; keep its traffic
+        // out of the control budget so downloads cannot prevent END/RESET or new OPENs.
         target.sendPluginMessage(plugin, channel, bytes);
         route.used = now;
     }
