@@ -65,6 +65,7 @@ This matches clients that parse incoming chat with:
 
 ```yaml
 language: zh_cn
+api-channel-count: 16
 announce-plugin-installed: true
 echo-to-sender: false
 notify-offline-receiver: true
@@ -200,6 +201,28 @@ Clients should retry incomplete messages after overload has subsided.
 Missing custom language files fall back to English without interrupting reload. Language identifiers
 are limited to letters, digits and underscores after alias normalization; message placeholder values
 are inserted literally, without expanding embedded placeholders or `&` color codes.
+
+### Raw encrypted channels (`raw_encrypted_channel` client branch)
+
+`api-channel-count` (default `16`, clamped to `1..256`) pre-registers
+`krypt04mcg_stream:data/0` through `krypt04mcg_stream:data/(n-1)`.
+An array maps each slot to one pair of players. Allocation selects a free slot
+subscribed to by both players; the server's pool is shared by all players.
+Configure the client's `apiChannelCount` as well to make additional slots usable.
+
+The relay uses the client's existing `krypt04mcg_stream:control` protocol for
+EXCHANGE, OPEN, ASSIGNED, READY, END, RESET and ABORT. Only control messages are
+decoded to establish and release routes; their sender comes from the authenticated
+player connection. No new protocol or data envelope is introduced.
+Data messages (16..16,400 bytes) are passed directly as the original `byte[]` on
+the same channel, without encoding, decoding, encryption or decryption.
+
+Data is forwarded only between the assigned players after READY and before that
+sender's END. Both ENDs, RESET, disconnect, lost subscription or 60 seconds of
+inactivity release the slot. Reload applies the configured count and aborts active
+streams. Raw streams have separate traffic budgets using the per-source and
+aggregate ingress limits described above; exceeding a budget aborts affected
+streams instead of silently dropping records from a live stream.
 
 ### Socket tunnel (Krypt04Mcg 0.22.0)
 
