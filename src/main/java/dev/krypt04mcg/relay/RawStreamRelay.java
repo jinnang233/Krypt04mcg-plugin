@@ -67,10 +67,11 @@ final class RawStreamRelay implements PluginMessageListener, Listener {
         Route route = routes[slot];
         if (route == null || !route.contains(source) || !route.ready || route.ended(source)) return;
         Player target = route.other(source);
-        if (bytes.length < 16 || bytes.length > 16400 || !supports(target, channel)) {
-            release(slot); // Losing a record must fail the stream, never masquerade as EOF.
+        if (!supports(target, channel)) {
+            release(slot);
             return;
         }
+        // Data is opaque: forward the original array without inspecting its size or contents.
         // Ordered stream records cannot be dropped or aborted to enforce a rate quota.
         // Client pacing and transport flow control govern bulk data; keep its traffic
         // out of the control budget so downloads cannot prevent END/RESET or new OPENs.

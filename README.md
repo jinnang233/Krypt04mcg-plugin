@@ -214,8 +214,8 @@ The relay uses the client's existing `krypt04mcg_stream:control` protocol for
 EXCHANGE, OPEN, ASSIGNED, READY, END, RESET and ABORT. Only control messages are
 decoded to establish and release routes; their sender comes from the authenticated
 player connection. No new protocol or data envelope is introduced.
-Data messages (16..16,400 bytes) are passed directly as the original `byte[]` on
-the same channel, without encoding, decoding, encryption or decryption.
+Data messages are passed directly as the original `byte[]` on the same channel,
+without payload length or content validation, encoding, decoding, encryption or decryption.
 
 Data is forwarded only between the assigned players after READY and before that
 sender's END. Both ENDs, RESET, disconnect, lost subscription or 60 seconds of
@@ -224,8 +224,8 @@ streams. Raw data records bypass relay packet/byte rate quotas and are forwarded
 immediately in callback order, preserving client pacing and transport flow control.
 Bulk transfers do not consume the separate control-message ingress budget, so a
 download cannot exhaust the budget needed for END, RESET or opening another stream.
-Malformed records still abort the affected stream; control-message floods retain
-the per-source and aggregate ingress limits described above. Server outbound
+Control-message floods retain the per-source and aggregate ingress limits
+described above. Server outbound
 buffering and server-wide network limits still apply, as with socket tunnels below.
 
 ### Socket tunnel (Krypt04Mcg 0.22.0)

@@ -141,7 +141,7 @@ class RawStreamRelayTest {
         assertArrayEquals(packet(0, "Alice", id, -1, new byte[30000]), deliveries.getFirst().bytes);
     }
 
-    @Test void malformedControlsCannotAllocateAndInvalidRecordsAbort() throws Exception {
+    @Test void malformedControlsCannotAllocate() throws Exception {
         byte[] valid = packet(1, "Bob", id, -1, new byte[32]);
         for (int length = 0; length < valid.length; length++)
             relay.onPluginMessageReceived(CONTROL, alice, Arrays.copyOf(valid, length));
@@ -149,10 +149,23 @@ class RawStreamRelayTest {
         relay.onPluginMessageReceived(CONTROL, alice, packet(99, "Bob", id, -1, new byte[32]));
         relay.onPluginMessageReceived(CONTROL, alice, packet(1, "Bob", id, -1, new byte[31]));
         assertTrue(deliveries.isEmpty());
-        for (int size : new int[]{15, 16401}) {
-            open(id); control(bob, 3, "Alice", id, 0); deliveries.clear();
-            relay.onPluginMessageReceived(DATA_PREFIX + 0, alice, new byte[size]);
-            assertControl(0, "Alice", 6, "Bob", id, 0); deliveries.clear();
+    }
+
+    @Test void arbitraryDataLengthsAndContentsForwardUnchangedWithoutAborting() throws Exception {
+        open(id); control(bob, 3, "Alice", id, 0); deliveries.clear();
+        Random random = new Random(42);
+        for (int size : new int[]{0, 1, 15, 16, 16400, 16401, 24577, 100001}) {
+            byte[] bytes = new byte[size];
+            random.nextBytes(bytes);
+            relay.onPluginMessageReceived(DATA_PREFIX + 0, alice, bytes);
+            relay.onPluginMessageReceived(DATA_PREFIX + 0, bob, bytes);
+            assertEquals(2, deliveries.size());
+            assertEquals(List.of("Bob", "Alice"), deliveries.stream().map(Delivery::target).toList());
+            for (Delivery delivery : deliveries) {
+                assertEquals(DATA_PREFIX + 0, delivery.channel);
+                assertSame(bytes, delivery.bytes);
+            }
+            deliveries.clear();
         }
     }
 
