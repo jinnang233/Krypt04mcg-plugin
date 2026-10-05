@@ -51,6 +51,8 @@ class RelayTrafficLimiterTest {
             }
         }
         assertEquals(4096, accepted);
+        assertEquals(RelayTrafficLimiter.ReceiveResult.GLOBAL_LIMIT,
+                limiter.receiveResult(UUID.randomUUID(), 10, 0));
         assertTrue(limiter.receive(UUID.randomUUID(), 10, 1000));
     }
 
@@ -64,6 +66,8 @@ class RelayTrafficLimiterTest {
             }
         }
         assertEquals((16 * 1024 * 1024) / 100000, accepted);
+        assertEquals(RelayTrafficLimiter.ReceiveResult.GLOBAL_LIMIT,
+                limiter.receiveResult(UUID.randomUUID(), 100000, 0));
         UUID sender = UUID.randomUUID();
         assertTrue(limiter.receive(sender, 1, 1000));
         limiter.clear();
@@ -75,8 +79,28 @@ class RelayTrafficLimiterTest {
         UUID alice = UUID.randomUUID(), bob = UUID.randomUUID();
         for (int i = 0; i < 512; i++) assertTrue(limiter.receive(alice, 10, 0));
         assertFalse(limiter.receive(alice, 10, 0));
+        assertEquals(RelayTrafficLimiter.ReceiveResult.SOURCE_LIMIT, limiter.receiveResult(alice, 10, 0));
         assertTrue(limiter.receive(bob, 10, 0));
         assertTrue(limiter.receive(alice, 10, 1000));
+    }
+
+    @Test void sourceByteLimitIsDistinctFromSharedOverload() {
+        var limiter = new RelayTrafficLimiter();
+        UUID sender = UUID.randomUUID();
+        for (int i = 0; i < 41; i++) assertTrue(limiter.receive(sender, 100000, 0));
+        assertEquals(RelayTrafficLimiter.ReceiveResult.SOURCE_LIMIT, limiter.receiveResult(sender, 100000, 0));
+        assertTrue(limiter.receive(UUID.randomUUID(), 100000, 0));
+    }
+
+    @Test void sourceTableCapacityIsSharedOverload() {
+        var limiter = new RelayTrafficLimiter();
+        UUID existing = UUID.randomUUID();
+        assertTrue(limiter.receive(existing, 1, 0));
+        for (int i = 1; i < 1024; i++) assertTrue(limiter.receive(UUID.randomUUID(), 1, 0));
+        assertEquals(RelayTrafficLimiter.ReceiveResult.GLOBAL_LIMIT,
+                limiter.receiveResult(UUID.randomUUID(), 1, 0));
+        assertTrue(limiter.receive(existing, 1, 0));
+        assertTrue(limiter.receive(UUID.randomUUID(), 1, 60001));
     }
 
     @Test void chargesEachBroadcastRecipientAndBoundsAmplification() {

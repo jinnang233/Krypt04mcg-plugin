@@ -57,11 +57,11 @@ jobs:
             release-artifacts/*.jar
       - name: Generate release notes
         shell: bash
+        env:
+          RELEASE_TAG: ${{ github.ref_type == 'tag' && github.ref_name || steps.snapshot.outputs.tag }}
+          RELEASE_NAME: ${{ github.ref_type == 'tag' && github.ref_name || steps.snapshot.outputs.name }}
         run: |
           set -euo pipefail
-
-          RELEASE_TAG="${{ github.ref_type == 'tag' && github.ref_name || steps.snapshot.outputs.tag }}"
-          RELEASE_NAME="${{ github.ref_type == 'tag' && github.ref_name || steps.snapshot.outputs.name }}"
 
           PREVIOUS_TAG="$(git describe --tags --abbrev=0 HEAD^ 2>/dev/null || true)"
 

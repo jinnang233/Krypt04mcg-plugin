@@ -6,6 +6,8 @@ import java.util.UUID;
 
 /** Byte and packet budgets charged before decoding and for every forwarded recipient. */
 final class RelayTrafficLimiter {
+    enum ReceiveResult { ACCEPTED, SOURCE_LIMIT, GLOBAL_LIMIT }
+
     private final Map<UUID, Source> sources = new HashMap<>();
     private final Bucket egress = new Bucket(64 * 1024 * 1024, 32 * 1024 * 1024);
     private final Bucket ingressBytes = new Bucket(16 * 1024 * 1024, 8 * 1024 * 1024);
@@ -13,17 +15,22 @@ final class RelayTrafficLimiter {
     private final Bucket egressPackets = new Bucket(16384, 8192);
     private final Bucket broadcastVisits = new Bucket(16384, 8192);
 
-    synchronized boolean receive(UUID sender, int bytes, long now) {
-        if (bytes < 0 || bytes > 100000) return false;
+    boolean receive(UUID sender, int bytes, long now) {
+        return receiveResult(sender, bytes, now) == ReceiveResult.ACCEPTED;
+    }
+
+    synchronized ReceiveResult receiveResult(UUID sender, int bytes, long now) {
+        if (bytes < 0 || bytes > 100000) return ReceiveResult.SOURCE_LIMIT;
         Source source = sources.get(sender);
         if (source == null) {
             sources.values().removeIf(s -> now - s.lastSeen > 60000);
-            if (sources.size() >= 1024) return false;
+            if (sources.size() >= 1024) return ReceiveResult.GLOBAL_LIMIT;
             source = new Source(); sources.put(sender, source);
         }
         source.lastSeen = now;
-        return source.packets.take(1, now) && source.bytes.take(bytes, now)
-                && ingressPackets.take(1, now) && ingressBytes.take(bytes, now);
+        if (!source.packets.take(1, now) || !source.bytes.take(bytes, now)) return ReceiveResult.SOURCE_LIMIT;
+        return ingressPackets.take(1, now) && ingressBytes.take(bytes, now)
+                ? ReceiveResult.ACCEPTED : ReceiveResult.GLOBAL_LIMIT;
     }
 
     synchronized boolean forward(UUID sender, int bytes, long now) {

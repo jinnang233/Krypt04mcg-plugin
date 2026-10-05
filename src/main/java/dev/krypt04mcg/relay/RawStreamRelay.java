@@ -59,8 +59,14 @@ final class RawStreamRelay implements PluginMessageListener, Listener {
     public void onPluginMessageReceived(String channel, Player source, byte[] bytes) {
         if (!CONTROL.equals(channel)) return;
         long now = now();
-        if (bytes.length > 31104 || !controlTraffic.receive(source.getUniqueId(), bytes.length, now)) {
+        if (bytes.length > 31104) {
             disconnect(source);
+            return;
+        }
+        var result = controlTraffic.receiveResult(source.getUniqueId(), bytes.length, now);
+        if (result != RelayTrafficLimiter.ReceiveResult.ACCEPTED) {
+            // Shared overload must not tear down an otherwise compliant player's routes.
+            if (result == RelayTrafficLimiter.ReceiveResult.SOURCE_LIMIT) disconnect(source);
             return;
         }
         try { control(source, StreamControl.decode(bytes), now); }

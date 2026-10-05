@@ -192,6 +192,71 @@ class RawStreamRelayTest {
         assertControl(0, "Alice", 6, "Missing", third, -1);
     }
 
+    @Test void sharedControlPacketOverloadDoesNotAbortExistingStreams() throws Exception {
+        assertSharedOverloadPreservesRoutes("ingressPackets");
+    }
+
+    @Test void sharedControlByteOverloadDoesNotAbortExistingStreams() throws Exception {
+        assertSharedOverloadPreservesRoutes("ingressBytes");
+    }
+
+    private void assertSharedOverloadPreservesRoutes(String budget) throws Exception {
+        open(id); control(bob, 3, "Alice", id, 0);
+        UUID second = UUID.randomUUID(); open(second); control(bob, 3, "Alice", second, 1);
+        Object bucket = field(field(relay, "controlTraffic"), budget);
+        setField(bucket, "tokens", 0.0);
+        setField(bucket, "updated", Long.MAX_VALUE); // Freeze refill without wall-clock timing assumptions.
+        deliveries.clear();
+        control(alice, 4, "Bob", id, 0);
+        assertTrue(deliveries.isEmpty()); // Drop the control, without ABORTing either route.
+        byte[] raw = new byte[16];
+        for (int slot = 0; slot < 2; slot++) {
+            receive(DATA_PREFIX + slot, alice, raw);
+            receive(DATA_PREFIX + slot, bob, raw);
+        }
+        assertEquals(List.of("Bob", "Alice", "Bob", "Alice"),
+                deliveries.stream().map(Delivery::target).toList());
+        for (Delivery delivery : deliveries) assertSame(raw, delivery.bytes);
+
+        setField(bucket, "tokens", ((Integer) field(bucket, "capacity")).doubleValue());
+        deliveries.clear();
+        control(alice, 4, "Bob", id, 0);
+        assertControl(0, "Bob", 4, "Alice", id, 0);
+        deliveries.clear();
+        receive(DATA_PREFIX + 0, alice, raw);
+        assertTrue(deliveries.isEmpty());
+        receive(DATA_PREFIX + 0, bob, raw);
+        assertEquals(1, deliveries.size()); // END still closes only the sending direction after recovery.
+    }
+
+    @Test void sourceControlOverloadStillAbortsItsRoutes() throws Exception {
+        open(id); control(bob, 3, "Alice", id, 0);
+        Map<?, ?> sources = (Map<?, ?>) field(field(relay, "controlTraffic"), "sources");
+        Object bucket = field(sources.get(alice.getUniqueId()), "packets");
+        setField(bucket, "tokens", 0.0);
+        setField(bucket, "updated", Long.MAX_VALUE);
+        deliveries.clear();
+        control(alice, 4, "Bob", id, 0);
+        assertEquals(2, deliveries.size());
+        assertControl(0, "Alice", 6, "Bob", id, 0);
+        assertControl(1, "Bob", 6, "Alice", id, 0);
+        deliveries.clear();
+        receive(DATA_PREFIX + 0, bob, new byte[16]);
+        assertTrue(deliveries.isEmpty());
+    }
+
+    private static Object field(Object owner, String name) throws Exception {
+        var field = owner.getClass().getDeclaredField(name);
+        field.setAccessible(true);
+        return field.get(owner);
+    }
+
+    private static void setField(Object owner, String name, Object value) throws Exception {
+        var field = owner.getClass().getDeclaredField(name);
+        field.setAccessible(true);
+        field.set(owner, value);
+    }
+
     @Test void exchangePreservesBodyAndUsesAuthenticatedSource() throws Exception {
         receive(CONTROL, alice, packet(0, "Bob", id, -1, new byte[30000]));
         assertArrayEquals(packet(0, "Alice", id, -1, new byte[30000]), deliveries.getFirst().bytes);
