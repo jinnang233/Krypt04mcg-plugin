@@ -10,6 +10,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.UUID;
+import java.util.Locale;
 import java.util.function.LongSupplier;
 
 public final class FragmentCollector {
@@ -19,6 +20,8 @@ public final class FragmentCollector {
     private final int maxFragmentsPerMessage;
     private final Map<Key, PartialMessage> partials = new LinkedHashMap<>();
     private static final int MAX_BUFFERED_CHARS = 4 * 1024 * 1024;
+    private static final int MAX_BUFFERED_CHARS_PER_SENDER = MAX_BUFFERED_CHARS / 4;
+    private static final int MAX_MESSAGES_PER_SENDER = 16;
     private int bufferedChars;
 
     public FragmentCollector(Duration timeout, int maxMessages, int maxFragmentsPerMessage) {
@@ -41,7 +44,7 @@ public final class FragmentCollector {
 
     public synchronized Optional<CompleteMessage> accept(UUID senderId, Fragment fragment, String rawLine) {
         cleanupTimedOut();
-        if (fragment.total() <= 0 || fragment.total() > maxFragmentsPerMessage
+        if (senderId == null || fragment == null || fragment.total() <= 0 || fragment.total() > maxFragmentsPerMessage
                 || fragment.index() < 0 || fragment.index() >= fragment.total()
                 || fragment.payload() == null || fragment.payload().length() > 256
                 || fragment.messageId() == null || fragment.messageId().length() > 32
@@ -49,10 +52,15 @@ public final class FragmentCollector {
             throw new IllegalArgumentException("invalid fragment or fragment limit exceeded");
         }
 
-        Key key = new Key(senderId, fragment.messageId());
+        Key key = new Key(senderId, fragment.messageId().toLowerCase(Locale.ROOT));
         if (partials.size() >= maxMessages && !partials.containsKey(key)) {
             // New, unauthenticated message IDs must not evict in-flight messages.
             // Existing assemblies can continue; completion, timeout or disconnect frees capacity.
+            return Optional.empty();
+        }
+
+        if (!partials.containsKey(key) && partials.keySet().stream()
+                .filter(k -> k.senderId().equals(senderId)).count() >= MAX_MESSAGES_PER_SENDER) {
             return Optional.empty();
         }
 
@@ -64,7 +72,9 @@ public final class FragmentCollector {
 
         if (!partial.payloads.containsKey(fragment.index())) {
             int added = fragment.payload().length() + rawLine.length();
-            if (added > MAX_BUFFERED_CHARS - bufferedChars) {
+            int senderChars = partials.entrySet().stream().filter(e -> e.getKey().senderId().equals(senderId))
+                    .mapToInt(e -> e.getValue().chars).sum();
+            if (added > MAX_BUFFERED_CHARS - bufferedChars || added > MAX_BUFFERED_CHARS_PER_SENDER - senderChars) {
                 partials.remove(key);
                 bufferedChars -= partial.chars;
                 throw new IllegalArgumentException("fragment memory budget exhausted");

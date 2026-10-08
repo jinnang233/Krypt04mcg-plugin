@@ -31,7 +31,8 @@ kick-krypt04mcg-chat-spam: false
 # Duplicate fragments do not extend the deadline; cleanup runs even when idle.
 fragment-timeout-seconds: 120
 
-# Maximum pending messages (1..1024); buffered fragment text also has a global cap.
+# Maximum pending messages globally (1..1024); also capped at 16 per player UUID.
+# Payload plus raw-line text is capped at 4,194,304 characters globally and 1,048,576 per UUID.
 max-pending-messages: 128
 
 # Maximum fragments accepted for a single encrypted message (1..1024).

@@ -28,8 +28,8 @@ Alice sent an encrypted message to Bob.
 
 ## Supported Server
 
-Current plugin version: **1.8.2**. See [CHANGELOG.md](CHANGELOG.md) for the
-in-flight fragment preservation fix and its transport scope.
+Current plugin version: **1.8.3**. See [CHANGELOG.md](CHANGELOG.md) for the
+per-player assembly and buffered-text limits, and their transport scope.
 
 - Built against Spigot API `26.3-R0.1-SNAPSHOT`.
 - Uses Java `25` for Minecraft/Spigot 26.3.
@@ -107,14 +107,14 @@ With Maven installed:
 mvn package
 ```
 
-The plugin jar will be generated as `target/Krypt04McgRelay-1.8.2.jar`.
+The plugin jar will be generated as `target/Krypt04McgRelay-1.8.3.jar`.
 
 ## GitHub Actions
 
 The repository includes a GitHub Actions workflow at `.github/workflows/build.yml`.
 It builds the plugin on pushes, pull requests, and manual runs, then uploads the generated jar as a workflow artifact.
 
-Release publishing is handled by `.github/workflows/release.yml`. Push the `v1.8.2` tag, or run the workflow manually, to build the plugin and create a GitHub Release. If the `RELEASE_SIGN_KEY` secret is configured with a PEM private key, release jars are signed and the public key is uploaded with the release assets.
+Release publishing is handled by `.github/workflows/release.yml`. Push the `v1.8.3` tag, or run the workflow manually, to build the plugin and create a GitHub Release. If the `RELEASE_SIGN_KEY` secret is configured with a PEM private key, release jars are signed and the public key is uploaded with the release assets.
 
 ## Install
 
@@ -193,6 +193,10 @@ duplicates do not refresh that deadline. When the pending-message capacity is fu
 are ignored without evicting in-flight messages; existing messages can still complete. Completion,
 timeout, disconnect or reload releases capacity. Fragment payloads and
 raw lines share a 4,194,304-character budget, in addition to the configured message and fragment limits.
+Each player UUID is additionally limited to 16 pending messages and 1,048,576 buffered characters
+(payload plus raw lines). Over-budget growth releases only the offending assembly. Hexadecimal ID
+case aliases share one assembly. Smaller configured global limits still apply. These limits cover
+vanilla chat/private commands; custom payload and raw streams use their separate relay paths.
 The timeout is clamped to 5–3,600 seconds, and both count limits to 1–1,024.
 
 Chat and legacy custom-payload transports each enforce aggregate ingress budgets of 2,048 packets/second
