@@ -19,10 +19,10 @@ public final class FragmentCollector {
     private final int maxMessages;
     private final int maxFragmentsPerMessage;
     private final Map<Key, PartialMessage> partials = new LinkedHashMap<>();
-    private static final int MAX_BUFFERED_CHARS = 4 * 1024 * 1024;
-    private static final int MAX_BUFFERED_CHARS_PER_SENDER = MAX_BUFFERED_CHARS / 4;
+    public static final int MAX_PACKET_BYTES = 256 * 1024;
+    public static final int MAX_FRAGMENTS = 2048;
+    private static final int MAX_ENCODED_PACKET_CHARS = (MAX_PACKET_BYTES * 4 + 2) / 3 + 2;
     private static final int MAX_MESSAGES_PER_SENDER = 16;
-    private int bufferedChars;
 
     public FragmentCollector(Duration timeout, int maxMessages, int maxFragmentsPerMessage) {
         this(timeout, maxMessages, maxFragmentsPerMessage, System::nanoTime);
@@ -71,18 +71,14 @@ public final class FragmentCollector {
         }
 
         if (!partial.payloads.containsKey(fragment.index())) {
-            int added = fragment.payload().length() + rawLine.length();
-            int senderChars = partials.entrySet().stream().filter(e -> e.getKey().senderId().equals(senderId))
-                    .mapToInt(e -> e.getValue().chars).sum();
-            if (added > MAX_BUFFERED_CHARS - bufferedChars || added > MAX_BUFFERED_CHARS_PER_SENDER - senderChars) {
+            int added = fragment.payload().length();
+            if (added > MAX_ENCODED_PACKET_CHARS - partial.chars) {
                 partials.remove(key);
-                bufferedChars -= partial.chars;
-                throw new IllegalArgumentException("fragment memory budget exhausted");
+                throw new IllegalArgumentException("encrypted chat packet exceeds 256 KiB");
             }
             partial.payloads.put(fragment.index(), fragment.payload());
             partial.rawLines.put(fragment.index(), rawLine);
             partial.chars += added;
-            bufferedChars += added;
         }
 
         if (!partial.complete()) {
@@ -96,8 +92,9 @@ public final class FragmentCollector {
             rawLines[i] = partial.rawLines.get(i);
         }
         partials.remove(key);
-        bufferedChars -= partial.chars;
-        return Optional.of(new CompleteMessage(Base64Url.decode(encoded.toString()), List.of(rawLines)));
+        byte[] packet = Base64Url.decode(encoded.toString());
+        if (packet.length > MAX_PACKET_BYTES) throw new IllegalArgumentException("encrypted chat packet exceeds 256 KiB");
+        return Optional.of(new CompleteMessage(packet, List.of(rawLines)));
     }
 
     public synchronized int cleanupTimedOut() {
@@ -107,7 +104,6 @@ public final class FragmentCollector {
         while (entries.hasNext()) {
             PartialMessage partial = entries.next();
             if (now - partial.createdAt < timeoutNanos) break;
-            bufferedChars -= partial.chars;
             entries.remove();
             removed++;
         }
@@ -119,7 +115,6 @@ public final class FragmentCollector {
         while (entries.hasNext()) {
             var entry = entries.next();
             if (entry.getKey().senderId().equals(senderId)) {
-                bufferedChars -= entry.getValue().chars;
                 entries.remove();
             }
         }
@@ -127,7 +122,6 @@ public final class FragmentCollector {
 
     public synchronized void clear() {
         partials.clear();
-        bufferedChars = 0;
     }
 
     private record Key(UUID senderId, String messageId) {

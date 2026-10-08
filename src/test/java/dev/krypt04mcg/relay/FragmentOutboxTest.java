@@ -28,12 +28,14 @@ class FragmentOutboxTest {
         assertTrue(queue.offer("a", List.of("b"), List.of("x"), 0));
     }
 
-    @Test void boundsTextEvenWhenMessageLimitIsNotReached() {
+    @Test void completedQueueCanExceedFormerTextQuotaAndAccept2048Fragments() {
         var queue = new FragmentOutbox<String>();
-        var large = Collections.nCopies(1024, "x".repeat(256));
-        for (int i = 0; i < 4; i++) assertTrue(queue.offer("a", List.of("b"), large, 0));
-        assertFalse(queue.offer("a", List.of("b"), List.of("x"), 0));
-        for (int i = 0; i < 1024; i++) assertNotNull(queue.poll(0));
+        var large = Collections.nCopies(2048, "x".repeat(256));
+        for (int i = 0; i < 8; i++) assertTrue(queue.offer("a", List.of("b", "a"), large, 0));
+        assertFalse(queue.offer("a", List.of("b"), Collections.nCopies(2049, "x"), 0));
+        for (int i = 0; i < 4096; i++) {
+            assertNotNull(queue.poll((i / 64) * 50_000_000L));
+        }
         assertTrue(queue.offer("a", List.of("b"), large, 0));
     }
 

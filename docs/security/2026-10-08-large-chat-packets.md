@@ -1,0 +1,11 @@
+# Large chat packets and removed text quotas — 2026-10-08
+
+Relay 1.9.0 removes the global, per-player and completed-outbox buffered-character quotas at the user's request. Pending message counts remain configured globally (default 128, clamp 1..1024) and capped at 16 per authenticated player UUID. The completed outbox remains capped at 64 jobs and 10 seconds from enqueue. Count-full admission preserves in-flight assemblies, and duplicates cannot refresh the first-fragment deadline.
+
+The default and supported maximum fragments increase from 256/1024 to 2048. Each decoded complete chat packet is bounded to 256 KiB, with an encoded length check during assembly and a decoded length check before returning it. The encoded allowance includes up to two padding characters for legacy compatibility. Oversized state is released without evicting other messages. Invalid completed encoding, completion, timeout, quit and reload also release state. The collector retains raw lines for later forwarding but no longer sums aggregate buffered text.
+
+More concurrent large messages can retain more memory. Count, packet, fragment, fixed lifetime and traffic limits provide finite bounds; they do not guarantee memory availability under load. A smaller global pending-message configuration can reduce retention. Custom payload/raw streams follow separate relay paths and do not consume this collector.
+
+Existing config files retain their values. Administrators should set `max-fragments-per-message: 2048` and keep the default `fragment-timeout-seconds: 120`, then reload configuration or restart. Both clients need 0.29.0 for large four-digit fragment totals. The client uses a supported fast custom-payload path when configured pacing would miss its fixed receive lifetime; freshness/replay checks remain intact.
+
+Maven verification passed 128 tests without failures, errors or skips. New regressions accept valid incomplete wire lines from one UUID beyond the former 1,048,576 and 4,194,304-character quotas, round-trip a 256 KiB packet, reject encoded growth and a decoded packet one byte over the limit without retaining offending state, and allow completed outbox text beyond its previous budget. Existing sender/count/deadline/traffic tests still pass. Actual Minecraft/Spigot/ProtocolLib networking and remote release completion were not exercised.

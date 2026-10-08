@@ -1,5 +1,15 @@
 # Changelog
 
+## 1.9.0 — 2026-10-08
+
+- Remove the 4,194,304-character global, 1,048,576-character per-player and 1,048,576-character completed-outbox text quotas. Keep global/per-player message counts, fixed expiry and traffic budgets. Concurrent large messages can retain more memory.
+- Increase the default/configurable maximum fragments and completed-outbox fragment limit to 2,048. Bound each decoded chat packet to 256 KiB, including KEM ciphertext, body ciphertext, signature and headers. Oversized assemblies release their own state without evicting unrelated messages.
+- Pair with client 0.29.0 for automatic fast custom-payload transport when normal pacing would miss the fixed deadline. Chat/API/file wire layouts remain unchanged; old clients retain their smaller fragment limit.
+
+Existing config files are preserved: set `max-fragments-per-message: 2048` for large-packet support and retain the default `fragment-timeout-seconds: 120`. Reload config or restart after changing it; replacing the JAR requires restarting/loading the new plugin code.
+
+Details and validation: [large packet and text quota changes](docs/security/2026-10-08-large-chat-packets.md).
+
 ## 1.8.3 — 2026-10-08
 
 - Bound pending vanilla-chat/private-command assemblies to 16 per player UUID, within the configured global limit. One player can no longer occupy all 128 default slots with unfinished message IDs.

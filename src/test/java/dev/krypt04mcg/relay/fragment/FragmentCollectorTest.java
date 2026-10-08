@@ -19,22 +19,43 @@ class FragmentCollectorTest {
         assertEquals(16, bounded.cleanupTimedOut());
     }
 
-    @Test void perPlayerTextBudgetCannotFillTheGlobalBudget() {
-        var bounded = new FragmentCollector(Duration.ofSeconds(5), 128, 1024, clock::get);
-        String text = "A".repeat(256);
-        for (int message = 0; message < 4; message++) {
-            for (int index = 0; index < 512; index++) bounded.accept(sender,
-                    new Fragment(Integer.toString(message), index, 1024, text), text);
+    @Test void bufferedTextCanExceedFormerPerPlayerAndGlobalQuotas() {
+        var bounded = new FragmentCollector(Duration.ofSeconds(120), 128, 2048, clock::get);
+        String text = "A".repeat(180);
+        var parser = new FragmentService();
+        int bufferedText = 0;
+        for (int message = 0; message < 8; message++) {
+            for (int index = 0; index < 1280; index++) {
+                String line = FragmentService.PREFIX + " " + String.format("%032x", message)
+                        + " " + index + " 2048 " + text;
+                bounded.accept(sender, parser.parse(line), line);
+                bufferedText += text.length() + line.length();
+            }
         }
-        assertThrows(IllegalArgumentException.class,
-                () -> bounded.accept(sender, new Fragment("overflow", 0, 1024, text), text));
-        UUID other = UUID.randomUUID();
-        assertArrayEquals(new byte[]{97}, bounded.accept(other,
+        assertTrue(bufferedText > 4 * 1024 * 1024);
+        clock.set(120_000_000_000L);
+        assertEquals(8, bounded.cleanupTimedOut());
+        assertArrayEquals(new byte[]{97}, bounded.accept(sender,
                 new Fragment(ID, 0, 1, "YQ"), "fragment").orElseThrow().packetBytes());
-        bounded.removeSender(sender);
-        assertTrue(bounded.accept(sender, new Fragment(ID, 0, 2, "AQ"), text).isEmpty());
-        assertArrayEquals(new byte[]{1, 2, 3}, bounded.accept(sender,
-                new Fragment(ID, 1, 2, "ID"), "last").orElseThrow().packetBytes());
+    }
+
+    @Test void maximumPacketRoundTripsAtDefaultFragmentSizeAndPacing() {
+        var bounded = new FragmentCollector(Duration.ofSeconds(120), 128, 2048, clock::get);
+        byte[] packet = new byte[FragmentCollector.MAX_PACKET_BYTES];
+        new java.util.Random(42).nextBytes(packet);
+        String encoded = java.util.Base64.getUrlEncoder().withoutPadding().encodeToString(packet);
+        int total = (encoded.length() + 179) / 180;
+        var parser = new FragmentService();
+        java.util.Optional<FragmentCollector.CompleteMessage> completed = java.util.Optional.empty();
+        for (int index = 0; index < total; index++) {
+            clock.set(index * 50_000_000L);
+            String line = FragmentService.PREFIX + " " + ID + " " + index + " " + total + " "
+                    + encoded.substring(index * 180, Math.min(encoded.length(), (index + 1) * 180));
+            completed = bounded.accept(sender, parser.parse(line), line);
+        }
+        assertArrayEquals(packet, completed.orElseThrow().packetBytes());
+        assertEquals(total, completed.orElseThrow().fragmentsInOrder().size());
+        assertTrue(clock.get() < 120_000_000_000L);
     }
 
     @Test void completingOrRemovingAPlayerReleasesTheirQuota() {
@@ -62,22 +83,35 @@ class FragmentCollectorTest {
         assertEquals(0, collector.cleanupTimedOut());
     }
 
-    @Test void globalMemoryBudgetRejectsGrowthAndIsReleasedOnQuitAndClear() {
-        var bounded = new FragmentCollector(Duration.ofSeconds(5), 32, 1024, clock::get);
+    @Test void oversizedPacketReleasesOnlyItsOwnAssembly() {
+        var bounded = new FragmentCollector(Duration.ofSeconds(5), 128, 2048, clock::get);
+        UUID victim = UUID.randomUUID();
+        bounded.accept(victim, new Fragment(ID, 0, 2, "AQ"), "first");
         String text = "A".repeat(256);
-        for (int message = 0; message < 16; message++) {
-            UUID source = new UUID(0, message / 4);
-            for (int index = 0; index < 512; index++) {
-                bounded.accept(source, new Fragment(Integer.toString(message), index, 1024, text), text);
-            }
+        for (int index = 0; index < 1365; index++) bounded.accept(sender,
+                new Fragment(ID, index, 2048, text), text);
+        assertThrows(IllegalArgumentException.class,
+                () -> bounded.accept(sender, new Fragment(ID, 1365, 2048, text), text));
+        assertArrayEquals(new byte[]{1, 2, 3}, bounded.accept(victim,
+                new Fragment(ID, 1, 2, "ID"), "last").orElseThrow().packetBytes());
+        clock.set(5_000_000_000L);
+        assertEquals(0, bounded.cleanupTimedOut());
+    }
+
+    @Test void decodedPacketOneByteOverLimitDoesNotLeavePendingState() {
+        var bounded = new FragmentCollector(Duration.ofSeconds(5), 128, 2048, clock::get);
+        String encoded = java.util.Base64.getUrlEncoder().withoutPadding()
+                .encodeToString(new byte[FragmentCollector.MAX_PACKET_BYTES + 1]);
+        int total = (encoded.length() + 179) / 180;
+        for (int index = 0; index < total - 1; index++) {
+            String payload = encoded.substring(index * 180, (index + 1) * 180);
+            bounded.accept(sender, new Fragment(ID, index, total, payload), payload);
         }
-        assertThrows(IllegalArgumentException.class, () -> bounded.accept(sender,
-                new Fragment("overflow", 0, 1024, text), text));
-        bounded.removeSender(new UUID(0, 0));
-        assertArrayEquals(new byte[]{97}, bounded.accept(sender,
-                new Fragment(ID, 0, 1, "YQ"), "fragment").orElseThrow().packetBytes());
-        bounded.clear();
-        assertTrue(bounded.accept(sender, new Fragment(ID, 0, 2, "YQ"), "fragment").isEmpty());
+        String last = encoded.substring((total - 1) * 180);
+        assertThrows(IllegalArgumentException.class,
+                () -> bounded.accept(sender, new Fragment(ID, total - 1, total, last), last));
+        clock.set(5_000_000_000L);
+        assertEquals(0, bounded.cleanupTimedOut());
     }
 
     @Test void invalidCompletedEncodingDoesNotLeavePendingState() {

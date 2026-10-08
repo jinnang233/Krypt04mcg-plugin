@@ -32,8 +32,9 @@ kick-krypt04mcg-chat-spam: false
 fragment-timeout-seconds: 120
 
 # Maximum pending messages globally (1..1024); also capped at 16 per player UUID.
-# Payload plus raw-line text is capped at 4,194,304 characters globally and 1,048,576 per UUID.
+# No global or per-player buffered-text quota. Each complete packet is limited to 256 KiB.
 max-pending-messages: 128
 
-# Maximum fragments accepted for a single encrypted message (1..1024).
-max-fragments-per-message: 256
+# Maximum fragments accepted for a single encrypted message (1..2048).
+# Existing config files retain their value; set this to 2048 when upgrading for large packets.
+max-fragments-per-message: 2048

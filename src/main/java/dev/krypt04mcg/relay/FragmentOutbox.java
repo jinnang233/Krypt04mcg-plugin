@@ -2,27 +2,22 @@ package dev.krypt04mcg.relay;
 
 import java.util.ArrayDeque;
 import java.util.List;
+import dev.krypt04mcg.relay.fragment.FragmentCollector;
 
-/** Main-thread-only delivery cursor. Bounds retained text and sends one fragment per poll. */
+/** Main-thread-only delivery cursor. Bounds message count and sends one fragment per poll. */
 final class FragmentOutbox<T> {
     private static final int MAX_MESSAGES = 64;
-    private static final int MAX_CHARS = 1024 * 1024;
     private static final long LIFETIME_NANOS = 10_000_000_000L;
     private final ArrayDeque<Delivery<T>> deliveries = new ArrayDeque<>();
-    private int bufferedChars;
 
     boolean offer(T sender, List<T> targets, List<String> fragments, long now) {
         expire(now);
         if (deliveries.size() >= MAX_MESSAGES || targets.isEmpty() || targets.size() > 2
-                || fragments.isEmpty() || fragments.size() > 1024) return false;
-        int chars = 0;
+                || fragments.isEmpty() || fragments.size() > FragmentCollector.MAX_FRAGMENTS) return false;
         for (String fragment : fragments) {
             if (fragment == null || fragment.length() > 256) return false;
-            chars += fragment.length();
         }
-        if (chars > MAX_CHARS - bufferedChars) return false;
-        deliveries.add(new Delivery<>(sender, List.copyOf(targets), List.copyOf(fragments), chars, now));
-        bufferedChars += chars;
+        deliveries.add(new Delivery<>(sender, List.copyOf(targets), List.copyOf(fragments), now));
         return true;
     }
 
@@ -41,7 +36,6 @@ final class FragmentOutbox<T> {
 
     void clear() {
         deliveries.clear();
-        bufferedChars = 0;
     }
 
     void removeParticipant(T participant) {
@@ -49,7 +43,6 @@ final class FragmentOutbox<T> {
         while (entries.hasNext()) {
             Delivery<T> delivery = entries.next();
             if (delivery.sender.equals(participant) || delivery.targets.contains(participant)) {
-                bufferedChars -= delivery.chars;
                 entries.remove();
             }
         }
@@ -60,7 +53,7 @@ final class FragmentOutbox<T> {
     }
 
     private void removeFirst() {
-        bufferedChars -= deliveries.remove().chars;
+        deliveries.remove();
     }
 
     record Forward<T>(T sender, T target, String fragment) {}
@@ -69,16 +62,14 @@ final class FragmentOutbox<T> {
         final T sender;
         final List<T> targets;
         final List<String> fragments;
-        final int chars;
         final long createdAt;
         int targetIndex;
         int fragmentIndex;
 
-        Delivery(T sender, List<T> targets, List<String> fragments, int chars, long createdAt) {
+        Delivery(T sender, List<T> targets, List<String> fragments, long createdAt) {
             this.sender = sender;
             this.targets = targets;
             this.fragments = fragments;
-            this.chars = chars;
             this.createdAt = createdAt;
         }
     }
