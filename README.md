@@ -28,6 +28,9 @@ Alice sent an encrypted message to Bob.
 
 ## Supported Server
 
+Current plugin version: **1.8.2**. See [CHANGELOG.md](CHANGELOG.md) for the
+in-flight fragment preservation fix and its transport scope.
+
 - Built against Spigot API `26.3-R0.1-SNAPSHOT`.
 - Uses Java `25` for Minecraft/Spigot 26.3.
 - ProtocolLib is optional for the chat spam-kick bypass. The chat relay and custom payload channels work without it.
@@ -104,14 +107,14 @@ With Maven installed:
 mvn package
 ```
 
-The plugin jar will be generated under `target/`.
+The plugin jar will be generated as `target/Krypt04McgRelay-1.8.2.jar`.
 
 ## GitHub Actions
 
 The repository includes a GitHub Actions workflow at `.github/workflows/build.yml`.
 It builds the plugin on pushes, pull requests, and manual runs, then uploads the generated jar as a workflow artifact.
 
-Release publishing is handled by `.github/workflows/release.yml`. Push a tag such as `v1.0.1`, or run the workflow manually, to build the plugin and create a GitHub Release. If the `RELEASE_SIGN_KEY` secret is configured with a PEM private key, release jars are signed and the public key is uploaded with the release assets.
+Release publishing is handled by `.github/workflows/release.yml`. Push the `v1.8.2` tag, or run the workflow manually, to build the plugin and create a GitHub Release. If the `RELEASE_SIGN_KEY` secret is configured with a PEM private key, release jars are signed and the public key is uploaded with the release assets.
 
 ## Install
 
