@@ -186,7 +186,9 @@ are sent incrementally from an outbox capped at 64 messages and 1,048,576 charac
 delivery deadline. Excess ingress and overflowing or expired deliveries are dropped. Disconnects
 remove affected deliveries; reload and disable empty both queues and cancel the processing task.
 Incomplete messages expire from their first fragment using a monotonic clock, even when traffic stops;
-duplicates do not refresh that deadline. Disconnects release pending fragments. Fragment payloads and
+duplicates do not refresh that deadline. When the pending-message capacity is full, new message IDs
+are ignored without evicting in-flight messages; existing messages can still complete. Completion,
+timeout, disconnect or reload releases capacity. Fragment payloads and
 raw lines share a 4,194,304-character budget, in addition to the configured message and fragment limits.
 The timeout is clamped to 5–3,600 seconds, and both count limits to 1–1,024.
 

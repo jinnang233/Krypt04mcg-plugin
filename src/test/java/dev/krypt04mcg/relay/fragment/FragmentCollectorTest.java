@@ -50,17 +50,44 @@ class FragmentCollectorTest {
         assertEquals(0, collector.cleanupTimedOut());
     }
 
-    @Test void capacityEvictsOldestAndQuitReleasesState() {
+    @Test void capacityRejectsNewMessageFloodAndPreservesAdmittedMessages() {
+        UUID second = UUID.randomUUID(), third = UUID.randomUUID();
+        collector.accept(sender, new Fragment(ID, 0, 2, "AQ"), "first");
+        collector.accept(second, new Fragment(ID, 0, 2, "AQ"), "first");
+        for (int i = 0; i < 100; i++) {
+            assertTrue(collector.accept(third, new Fragment(String.format("%032x", i), 0, 2, "AQ"),
+                    "flood").isEmpty());
+        }
+        for (UUID admitted : new UUID[]{sender, second}) {
+            var completed = collector.accept(admitted, new Fragment(ID, 1, 2, "ID"), "last").orElseThrow();
+            assertArrayEquals(new byte[]{1, 2, 3}, completed.packetBytes());
+            assertEquals(java.util.List.of("first", "last"), completed.fragmentsInOrder());
+        }
+        clock.set(5_000_000_000L);
+        assertEquals(0, collector.cleanupTimedOut());
+    }
+
+    @Test void quitReleasesCapacityForPreviouslyRejectedMessage() {
         UUID second = UUID.randomUUID(), third = UUID.randomUUID();
         add(sender, ID, 0);
         add(second, ID, 0);
         add(third, ID, 0);
-        // Oldest was evicted, so its final fragment cannot complete a packet.
-        assertTrue(collector.accept(sender, new Fragment(ID, 1, 2, "YQ"), "fragment").isEmpty());
         collector.removeSender(sender);
-        collector.removeSender(third);
+        add(third, ID, 0);
         clock.set(5_000_000_000L);
-        assertEquals(0, collector.cleanupTimedOut());
+        assertEquals(2, collector.cleanupTimedOut());
+    }
+
+    @Test void rejectedMessagesDoNotExtendDeadlinesAndExpiredSlotsCanBeReused() {
+        UUID second = UUID.randomUUID(), third = UUID.randomUUID();
+        add(sender, ID, 0);
+        add(second, ID, 0);
+        clock.set(4_000_000_000L);
+        add(third, ID, 0);
+        clock.set(5_000_000_000L);
+        assertEquals(2, collector.cleanupTimedOut());
+        assertArrayEquals(new byte[]{97}, collector.accept(third,
+                new Fragment(ID, 0, 1, "YQ"), "fragment").orElseThrow().packetBytes());
     }
 
     @Test void validatesDirectCallersAndUnsafeLimits() {

@@ -51,7 +51,9 @@ public final class FragmentCollector {
 
         Key key = new Key(senderId, fragment.messageId());
         if (partials.size() >= maxMessages && !partials.containsKey(key)) {
-            evictOldest();
+            // New, unauthenticated message IDs must not evict in-flight messages.
+            // Existing assemblies can continue; completion, timeout or disconnect frees capacity.
+            return Optional.empty();
         }
 
         PartialMessage partial = partials.computeIfAbsent(key,
@@ -116,14 +118,6 @@ public final class FragmentCollector {
     public synchronized void clear() {
         partials.clear();
         bufferedChars = 0;
-    }
-
-    private void evictOldest() {
-        var entries = partials.values().iterator();
-        if (entries.hasNext()) {
-            bufferedChars -= entries.next().chars;
-            entries.remove();
-        }
     }
 
     private record Key(UUID senderId, String messageId) {
