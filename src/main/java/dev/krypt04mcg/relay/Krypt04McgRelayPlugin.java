@@ -13,6 +13,9 @@ public final class Krypt04McgRelayPlugin extends JavaPlugin {
     private RawStreamRelay rawStreamRelay;
     private MessageBundle messages;
 
+    /**
+     * Handles the enable callback for the krypt04 mcg relay plugin.
+     */
     @Override
     public void onEnable() {
         saveDefaultConfig();
@@ -21,6 +24,9 @@ public final class Krypt04McgRelayPlugin extends JavaPlugin {
         getLogger().warning(messages.text("experimental-warning"));
     }
 
+    /**
+     * Handles the disable callback for the krypt04 mcg relay plugin.
+     */
     @Override
     public void onDisable() {
         if (rawStreamRelay != null) {
@@ -42,6 +48,15 @@ public final class Krypt04McgRelayPlugin extends JavaPlugin {
         }
     }
 
+    /**
+     * Handles the command callback for the krypt04 mcg relay plugin.
+     *
+     * @param sender the sender or source associated with this operation
+     * @param command the command supplied to this operation
+     * @param label the label supplied to this operation
+     * @param args the args supplied to this operation
+     * @return whether the condition or operation described above succeeds
+     */
     @Override
     public boolean onCommand(CommandSender sender, Command command, String label, String[] args) {
         if (args.length == 1 && args[0].equalsIgnoreCase("reload")) {
@@ -54,6 +69,9 @@ public final class Krypt04McgRelayPlugin extends JavaPlugin {
         return true;
     }
 
+    /**
+     * Performs the reload relay operation for the krypt04 mcg relay plugin.
+     */
     private void reloadRelay() {
         if (rawStreamRelay != null) rawStreamRelay.unregister();
         RelayConfig config = RelayConfig.from(this);

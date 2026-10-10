@@ -10,6 +10,15 @@ final class FragmentOutbox<T> {
     private static final long LIFETIME_NANOS = 10_000_000_000L;
     private final ArrayDeque<Delivery<T>> deliveries = new ArrayDeque<>();
 
+    /**
+     * Returns the recorded false for the incremental relay delivery queue.
+     *
+     * @param sender the sender or source associated with this operation
+     * @param targets the targets supplied to this operation
+     * @param fragments the fragments supplied to this operation
+     * @param now the now supplied to this operation
+     * @return whether the condition or operation described above succeeds
+     */
     boolean offer(T sender, List<T> targets, List<String> fragments, long now) {
         expire(now);
         if (deliveries.size() >= MAX_MESSAGES || targets.isEmpty() || targets.size() > 2
@@ -21,6 +30,12 @@ final class FragmentOutbox<T> {
         return true;
     }
 
+    /**
+     * Returns the recorded null for the incremental relay delivery queue.
+     *
+     * @param now the now supplied to this operation
+     * @return the result described above
+     */
     Forward<T> poll(long now) {
         expire(now);
         Delivery<T> delivery = deliveries.peek();
@@ -34,10 +49,18 @@ final class FragmentOutbox<T> {
         return next;
     }
 
+    /**
+     * Clears retained state in the incremental relay delivery queue.
+     */
     void clear() {
         deliveries.clear();
     }
 
+    /**
+     * Performs the remove participant operation for the incremental relay delivery queue.
+     *
+     * @param participant the participant supplied to this operation
+     */
     void removeParticipant(T participant) {
         var entries = deliveries.iterator();
         while (entries.hasNext()) {
@@ -48,10 +71,18 @@ final class FragmentOutbox<T> {
         }
     }
 
+    /**
+     * Expires state whose deadline has elapsed in the incremental relay delivery queue.
+     *
+     * @param now the now supplied to this operation
+     */
     private void expire(long now) {
         while (!deliveries.isEmpty() && now - deliveries.peek().createdAt >= LIFETIME_NANOS) removeFirst();
     }
 
+    /**
+     * Performs the remove first operation for the incremental relay delivery queue.
+     */
     private void removeFirst() {
         deliveries.remove();
     }
@@ -66,6 +97,14 @@ final class FragmentOutbox<T> {
         int targetIndex;
         int fragmentIndex;
 
+        /**
+         * Creates a delivery with the supplied dependencies and initial state.
+         *
+         * @param sender the sender or source associated with this operation
+         * @param targets the targets supplied to this operation
+         * @param fragments the fragments supplied to this operation
+         * @param createdAt the created at supplied to this operation
+         */
         Delivery(T sender, List<T> targets, List<String> fragments, long createdAt) {
             this.sender = sender;
             this.targets = targets;

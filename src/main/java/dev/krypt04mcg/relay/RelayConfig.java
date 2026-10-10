@@ -16,6 +16,12 @@ public record RelayConfig(
         int maxPendingMessages,
         int maxFragmentsPerMessage
 ) {
+    /**
+     * Resolves the supplied values into the definition used by the relay config.
+     *
+     * @param plugin the plugin supplied to this operation
+     * @return the result described above
+     */
     public static RelayConfig from(JavaPlugin plugin) {
         return new RelayConfig(
                 plugin.getConfig().getString("language", "zh_cn"),

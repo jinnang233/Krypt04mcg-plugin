@@ -24,10 +24,25 @@ public final class FragmentCollector {
     private static final int MAX_ENCODED_PACKET_CHARS = (MAX_PACKET_BYTES * 4 + 2) / 3 + 2;
     private static final int MAX_MESSAGES_PER_SENDER = 16;
 
+    /**
+     * Creates a fragment collector with the supplied dependencies and initial state.
+     *
+     * @param timeout the configured expiry interval
+     * @param maxMessages the max messages supplied to this operation
+     * @param maxFragmentsPerMessage the max fragments per message supplied to this operation
+     */
     public FragmentCollector(Duration timeout, int maxMessages, int maxFragmentsPerMessage) {
         this(timeout, maxMessages, maxFragmentsPerMessage, System::nanoTime);
     }
 
+    /**
+     * Creates a fragment collector with the supplied dependencies and initial state.
+     *
+     * @param timeout the configured expiry interval
+     * @param maxMessages the max messages supplied to this operation
+     * @param maxFragmentsPerMessage the max fragments per message supplied to this operation
+     * @param clock the time source used for deadline or expiry checks
+     */
     FragmentCollector(Duration timeout, int maxMessages, int maxFragmentsPerMessage, LongSupplier clock) {
         if (timeout.isNegative() || timeout.isZero() || maxMessages < 1 || maxFragmentsPerMessage < 1) {
             throw new IllegalArgumentException("invalid collector limits");
@@ -42,6 +57,17 @@ public final class FragmentCollector {
         this.maxFragmentsPerMessage = maxFragmentsPerMessage;
     }
 
+    /**
+     * Collects validated fragments under the authenticated player UUID and canonical message ID,
+     * preserving admitted messages when count limits are full. Unique indices are stored once; per-packet
+     * encoded and decoded lengths are bounded. There is no aggregate character quota. Completion removes
+     * the partial state before decoding, and authenticity is still checked at the clients.
+     *
+     * @param senderId the authenticated player UUID associated with the fragments
+     * @param fragment the individual fragment or delivery record
+     * @param rawLine the original wire line retained for forwarding
+     * @return the result described above
+     */
     public synchronized Optional<CompleteMessage> accept(UUID senderId, Fragment fragment, String rawLine) {
         cleanupTimedOut();
         if (senderId == null || fragment == null || fragment.total() <= 0 || fragment.total() > maxFragmentsPerMessage
@@ -97,6 +123,12 @@ public final class FragmentCollector {
         return Optional.of(new CompleteMessage(packet, List.of(rawLines)));
     }
 
+    /**
+     * Removes messages whose original monotonic admission deadline has elapsed. Both duplicate and fresh
+     * fragments leave the first-fragment lifetime unchanged.
+     *
+     * @return the result described above
+     */
     public synchronized int cleanupTimedOut() {
         long now = clock.getAsLong();
         int removed = 0;
@@ -110,6 +142,11 @@ public final class FragmentCollector {
         return removed;
     }
 
+    /**
+     * Performs the remove sender operation for the player-bound relay chat assembly.
+     *
+     * @param senderId the authenticated player UUID associated with the fragments
+     */
     public synchronized void removeSender(UUID senderId) {
         var entries = partials.entrySet().iterator();
         while (entries.hasNext()) {
@@ -120,6 +157,9 @@ public final class FragmentCollector {
         }
     }
 
+    /**
+     * Clears retained state in the player-bound relay chat assembly.
+     */
     public synchronized void clear() {
         partials.clear();
     }
@@ -134,11 +174,22 @@ public final class FragmentCollector {
         private final Map<Integer, String> rawLines = new HashMap<>();
         private int chars;
 
+        /**
+         * Creates a partial message with the supplied dependencies and initial state.
+         *
+         * @param total the total supplied to this operation
+         * @param now the now supplied to this operation
+         */
         private PartialMessage(int total, long now) {
             this.total = total;
             this.createdAt = now;
         }
 
+        /**
+         * Returns the complete value used by the player-bound relay chat assembly.
+         *
+         * @return whether the condition or operation described above succeeds
+         */
         private boolean complete() {
             return payloads.size() == total;
         }

@@ -22,6 +22,12 @@ final class RawStreamRelay implements PluginMessageListener, Listener {
     private final RelayTrafficLimiter controlTraffic = new RelayTrafficLimiter();
     private BukkitTask cleanup;
 
+    /**
+     * Creates a raw stream relay with the supplied dependencies and initial state.
+     *
+     * @param plugin the plugin supplied to this operation
+     * @param count the required number of frame components
+     */
     RawStreamRelay(Plugin plugin, int count) {
         this.plugin = plugin;
         routes = new Route[Math.clamp(count, 1, 256)];
@@ -29,6 +35,9 @@ final class RawStreamRelay implements PluginMessageListener, Listener {
         for (int slot = 0; slot < routes.length; slot++) dataChannels[slot] = new DataChannel(slot);
     }
 
+    /**
+     * Registers the supported callbacks and channels for the opaque raw-stream relay.
+     */
     void register() {
         var messenger = plugin.getServer().getMessenger();
         messenger.registerIncomingPluginChannel(plugin, CONTROL, this);
@@ -41,6 +50,9 @@ final class RawStreamRelay implements PluginMessageListener, Listener {
         cleanup = plugin.getServer().getScheduler().runTaskTimer(plugin, () -> expire(now()), 20, 20);
     }
 
+    /**
+     * Removes the registered callbacks and channels from the opaque raw-stream relay.
+     */
     void unregister() {
         if (cleanup != null) cleanup.cancel();
         for (int slot = 0; slot < routes.length; slot++) release(slot);
@@ -55,6 +67,15 @@ final class RawStreamRelay implements PluginMessageListener, Listener {
         controlTraffic.clear();
     }
 
+    /**
+     * Dispatches bounded control input or data for the statically registered slot. Source/route checks use
+     * the Bukkit connection identity; data records are forwarded opaquely and do not become trusted
+     * plaintext at the server.
+     *
+     * @param channel the business or transport channel identifier
+     * @param source the source supplied to this operation
+     * @param bytes the bytes supplied to this operation
+     */
     @Override
     public void onPluginMessageReceived(String channel, Player source, byte[] bytes) {
         if (!CONTROL.equals(channel)) return;
@@ -78,11 +99,25 @@ final class RawStreamRelay implements PluginMessageListener, Listener {
         private final int slot;
         private final String channel;
 
+        /**
+         * Creates a data channel with the supplied dependencies and initial state.
+         *
+         * @param slot the slot supplied to this operation
+         */
         DataChannel(int slot) {
             this.slot = slot;
             channel = DATA_PREFIX + slot;
         }
 
+        /**
+         * Dispatches bounded control input or data for the statically registered slot. Source/route checks use
+         * the Bukkit connection identity; data records are forwarded opaquely and do not become trusted
+         * plaintext at the server.
+         *
+         * @param ignored the ignored supplied to this operation
+         * @param source the source supplied to this operation
+         * @param bytes the bytes supplied to this operation
+         */
         @Override
         public void onPluginMessageReceived(String ignored, Player source, byte[] bytes) {
             Route route = routes[slot];
@@ -97,6 +132,15 @@ final class RawStreamRelay implements PluginMessageListener, Listener {
         }
     }
 
+    /**
+     * Handles structurally validated stream control using the authenticated Bukkit source and assigned
+     * route state. Server-only control kinds cannot be injected by clients. End-to-end control tags and
+     * encrypted record contents are verified by clients, not by this opaque relay.
+     *
+     * @param source the source supplied to this operation
+     * @param p the p supplied to this operation
+     * @param now the now supplied to this operation
+     */
     private void control(Player source, StreamControl p, long now) {
         if (source.getName().equalsIgnoreCase(p.peer())) return;
         if (p.kind() == EXCHANGE) {
@@ -149,18 +193,45 @@ final class RawStreamRelay implements PluginMessageListener, Listener {
         if (p.kind() == RESET || route.sourceEnded && route.targetEnded) routes[slot] = null;
     }
 
+    /**
+     * Performs the supports operation for the opaque raw-stream relay.
+     *
+     * @param player the player supplied to this operation
+     * @param channel the business or transport channel identifier
+     * @return whether the condition or operation described above succeeds
+     */
     private static boolean supports(Player player, String channel) {
         return player != null && player.isOnline() && player.getListeningPluginChannels().contains(channel);
     }
 
+    /**
+     * Submits the supplied data through the opaque raw-stream relay path. Local submission does not by
+     * itself acknowledge remote receipt.
+     *
+     * @param target the target supplied to this operation
+     * @param p the p supplied to this operation
+     * @param peer the peer identifier associated with this operation
+     * @param kind the kind supplied to this operation
+     * @param slot the slot supplied to this operation
+     */
     private void send(Player target, StreamControl p, String peer, StreamControl.Kind kind, int slot) {
         if (plugin.isEnabled() && supports(target, CONTROL))
             target.sendPluginMessage(plugin, CONTROL, p.encode(peer, kind, slot));
     }
 
+    /**
+     * Handles the quit callback for the opaque raw-stream relay.
+     *
+     * @param event the event supplied to this operation
+     */
     @EventHandler
     public void onQuit(PlayerQuitEvent event) { disconnect(event.getPlayer()); }
 
+    /**
+     * Handles the unregister channel callback for the opaque raw-stream relay.
+     *
+     * @param event the event supplied to this operation
+     */
     @EventHandler
     public void onUnregisterChannel(PlayerUnregisterChannelEvent event) {
         if (CONTROL.equals(event.getChannel())) {
@@ -174,12 +245,24 @@ final class RawStreamRelay implements PluginMessageListener, Listener {
         }
     }
 
+    /**
+     * Performs the disconnect operation for the opaque raw-stream relay.
+     *
+     * @param player the player supplied to this operation
+     */
     private void disconnect(Player player) {
         for (int slot = 0; slot < routes.length; slot++) {
             if (routes[slot] != null && routes[slot].contains(player)) release(slot);
         }
     }
 
+    /**
+     * Expires inactive or incomplete routes according to their stored deadlines and releases their slots.
+     * Ordinary raw-stream liveness is distinct from fixed application-level chat/file completion
+     * deadlines.
+     *
+     * @param now the now supplied to this operation
+     */
     void expire(long now) {
         for (int slot = 0; slot < routes.length; slot++) {
             Route route = routes[slot];
@@ -190,6 +273,12 @@ final class RawStreamRelay implements PluginMessageListener, Listener {
         }
     }
 
+    /**
+     * Releases the assigned slot and associated route/control state so stale route bindings cannot remain
+     * available after close, abort or expiry.
+     *
+     * @param slot the slot supplied to this operation
+     */
     private void release(int slot) {
         Route route = routes[slot];
         if (route == null) return;
@@ -198,6 +287,11 @@ final class RawStreamRelay implements PluginMessageListener, Listener {
         send(route.target, route.open, route.source.getName(), ABORT, slot);
     }
 
+    /**
+     * Returns the now value used by the opaque raw-stream relay.
+     *
+     * @return the result described above
+     */
     private static long now() { return System.nanoTime() / 1000000; }
 
     private static final class Route {
@@ -206,12 +300,38 @@ final class RawStreamRelay implements PluginMessageListener, Listener {
         boolean ready, sourceEnded, targetEnded;
         long used;
 
+        /**
+         * Creates a route with the supplied dependencies and initial state.
+         *
+         * @param source the source supplied to this operation
+         * @param target the target supplied to this operation
+         * @param open the open supplied to this operation
+         * @param now the now supplied to this operation
+         */
         Route(Player source, Player target, StreamControl open, long now) {
             this.source = source; this.target = target; this.open = open; used = now;
         }
 
+        /**
+         * Performs the contains operation for the opaque raw-stream relay.
+         *
+         * @param player the player supplied to this operation
+         * @return whether the condition or operation described above succeeds
+         */
         boolean contains(Player player) { return player == source || player == target; }
+        /**
+         * Performs the other operation for the opaque raw-stream relay.
+         *
+         * @param player the player supplied to this operation
+         * @return the result described above
+         */
         Player other(Player player) { return player == source ? target : source; }
+        /**
+         * Performs the ended operation for the opaque raw-stream relay.
+         *
+         * @param player the player supplied to this operation
+         * @return whether the condition or operation described above succeeds
+         */
         boolean ended(Player player) { return player == source ? sourceEnded : targetEnded; }
     }
 }

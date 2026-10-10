@@ -11,6 +11,12 @@ record StreamControl(Kind kind, String peer, UUID id, int slot, String channel,
                      String sessionId, long sequence, byte[] body) {
     enum Kind { EXCHANGE, OPEN, ASSIGNED, READY, END, RESET, ABORT }
 
+    /**
+     * Decodes the supplied input using the format expected by the raw-stream control frame.
+     *
+     * @param bytes the bytes supplied to this operation
+     * @return the result described above
+     */
     static StreamControl decode(byte[] bytes) {
         PayloadReader reader = new PayloadReader(bytes);
         int kind = reader.readVarInt();
@@ -31,6 +37,14 @@ record StreamControl(Kind kind, String peer, UUID id, int slot, String channel,
         return new StreamControl(Kind.values()[kind], peer, id, slot, channel, session, sequence, body);
     }
 
+    /**
+     * Encodes the supplied value into the representation used by the raw-stream control frame.
+     *
+     * @param source the source supplied to this operation
+     * @param routedKind the routed kind supplied to this operation
+     * @param assignedSlot the assigned slot supplied to this operation
+     * @return the resulting array produced by this operation
+     */
     byte[] encode(String source, Kind routedKind, int assignedSlot) {
         ByteArrayOutputStream out = new ByteArrayOutputStream();
         writeVarInt(out, routedKind.ordinal());

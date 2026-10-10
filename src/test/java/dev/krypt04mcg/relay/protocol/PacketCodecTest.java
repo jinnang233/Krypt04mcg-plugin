@@ -25,6 +25,12 @@ final class PacketCodecTest {
     private final PacketCodec codec = new PacketCodec();
 
     // Frozen wire bytes emitted by the current Krypt04Mcg client encoder, not the relay.
+    /**
+     * Provides the client packets fixture operation used by the packet codec test regression scenarios.
+     *
+     * @return the result described above
+     * @throws Exception if the delegated operation cannot complete successfully
+     */
     static Stream<String> clientPackets() throws Exception {
         try (var reader = new BufferedReader(new InputStreamReader(
                 PacketCodecTest.class.getResourceAsStream("/client-packets.txt"), StandardCharsets.UTF_8))) {
@@ -32,6 +38,11 @@ final class PacketCodecTest {
         }
     }
 
+    /**
+     * Verifies that decodes client wire bytes.
+     *
+     * @param fixture the fixture supplied to this operation
+     */
     @ParameterizedTest
     @MethodSource("clientPackets")
     void decodesClientWireBytes(String fixture) {
@@ -62,6 +73,11 @@ final class PacketCodecTest {
         assertEquals(sessionV4 ? 4294967297L : 0, packet.sequence());
     }
 
+    /**
+     * Verifies that rejects every truncation and trailing bytes.
+     *
+     * @param fixture the fixture supplied to this operation
+     */
     @ParameterizedTest
     @MethodSource("clientPackets")
     void rejectsEveryTruncationAndTrailingBytes(String fixture) {
@@ -73,6 +89,11 @@ final class PacketCodecTest {
         assertThrows(IllegalArgumentException.class, () -> codec.decode(Arrays.copyOf(bytes, bytes.length + 4)));
     }
 
+    /**
+     * Verifies that rejects signed v4 session unknown version and malformed utf8.
+     *
+     * @throws Exception if the delegated operation cannot complete successfully
+     */
     @Test
     void rejectsSignedV4SessionUnknownVersionAndMalformedUtf8() throws Exception {
         byte[] bytes = sessionPacket();
@@ -82,10 +103,16 @@ final class PacketCodecTest {
         bytes[0] = 5;
         assertThrows(IllegalArgumentException.class, () -> codec.decode(bytes));
         bytes[0] = 4;
-        bytes[5] = (byte) 0xff; // First UTF-8 byte of sender, after its u16 length.
+        bytes[5] = (byte) 0xff;
+        // First UTF-8 byte of sender, after its u16 length.
         assertThrows(IllegalArgumentException.class, () -> codec.decode(bytes));
     }
 
+    /**
+     * Verifies that reassembles v4 session fragments without changing forwarded lines.
+     *
+     * @throws Exception if the delegated operation cannot complete successfully
+     */
     @Test
     void reassemblesV4SessionFragmentsWithoutChangingForwardedLines() throws Exception {
         byte[] bytes = sessionPacket();
@@ -104,11 +131,23 @@ final class PacketCodecTest {
         assertEquals(4294967297L, codec.decode(complete.packetBytes()).sequence());
     }
 
+    /**
+     * Provides the session packet fixture operation used by the packet codec test regression scenarios.
+     *
+     * @return the resulting array produced by this operation
+     * @throws Exception if the delegated operation cannot complete successfully
+     */
     private static byte[] sessionPacket() throws Exception {
         return clientPackets().filter(line -> line.startsWith("4 SESSION_MESSAGE 0 "))
                 .map(PacketCodecTest::wireBytes).findFirst().orElseThrow();
     }
 
+    /**
+     * Provides the wire bytes fixture operation used by the packet codec test regression scenarios.
+     *
+     * @param fixture the fixture supplied to this operation
+     * @return the resulting array produced by this operation
+     */
     private static byte[] wireBytes(String fixture) {
         return HexFormat.of().parseHex(fixture.split(" ")[3]);
     }

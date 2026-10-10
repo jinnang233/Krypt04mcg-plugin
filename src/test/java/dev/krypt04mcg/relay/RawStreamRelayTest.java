@@ -75,13 +75,29 @@ class RawStreamRelayTest {
     private final Player bob = player("Bob", Set.of(CONTROL, DATA_PREFIX + 0, DATA_PREFIX + 1));
     private final UUID id = UUID.randomUUID();
 
+    /**
+     * Provides the register channels fixture operation used by the raw stream relay test regression
+     * scenarios.
+     */
     @BeforeEach void registerChannels() { relay.register(); }
 
+    /**
+     * Provides the receive fixture operation used by the raw stream relay test regression scenarios.
+     *
+     * @param channel the business or transport channel identifier
+     * @param source the source supplied to this operation
+     * @param bytes the bytes supplied to this operation
+     */
     private void receive(String channel, Player source, byte[] bytes) {
         PluginMessageListener listener = listeners.get(channel);
         if (listener != null) listener.onPluginMessageReceived(channel, source, bytes);
     }
 
+    /**
+     * Verifies that bound data callback does not inspect channel or query player metadata.
+     *
+     * @throws Exception if the delegated operation cannot complete successfully
+     */
     @Test void boundDataCallbackDoesNotInspectChannelOrQueryPlayerMetadata() throws Exception {
         open(id); control(bob, 3, "Alice", id, 0); deliveries.clear();
         PluginMessageListener first = listeners.get(DATA_PREFIX + 0);
@@ -103,6 +119,11 @@ class RawStreamRelayTest {
         }
     }
 
+    /**
+     * Verifies that subscription removal immediately clears only affected routes.
+     *
+     * @throws Exception if the delegated operation cannot complete successfully
+     */
     @Test void subscriptionRemovalImmediatelyClearsOnlyAffectedRoutes() throws Exception {
         open(id); control(bob, 3, "Alice", id, 0);
         UUID second = UUID.randomUUID(); open(second); control(bob, 3, "Alice", second, 1);
@@ -120,6 +141,11 @@ class RawStreamRelayTest {
         assertEquals(0, StreamControl.decode(deliveries.getFirst().bytes).slot());
     }
 
+    /**
+     * Verifies that allocates common slot and forwards the exact raw array both ways.
+     *
+     * @throws Exception if the delegated operation cannot complete successfully
+     */
     @Test void allocatesCommonSlotAndForwardsTheExactRawArrayBothWays() throws Exception {
         Player receiver = player("Bob", Set.of(CONTROL, DATA_PREFIX + 1));
         open(id);
@@ -135,15 +161,22 @@ class RawStreamRelayTest {
         assertEquals(List.of("Bob", "Alice"), deliveries.stream().map(Delivery::target).toList());
         for (Delivery d : deliveries) {
             assertEquals(DATA_PREFIX + 1, d.channel);
-            assertSame(raw, d.bytes); // No decoding, wrapping or copying.
+            assertSame(raw, d.bytes);
+            // No decoding, wrapping or copying.
         }
     }
 
+    /**
+     * Verifies that blocks unrelated players and forged lifecycle messages.
+     *
+     * @throws Exception if the delegated operation cannot complete successfully
+     */
     @Test void blocksUnrelatedPlayersAndForgedLifecycleMessages() throws Exception {
         Player eve = player("Eve", Set.of(CONTROL, DATA_PREFIX + 0));
         open(id); control(alice, 3, "Bob", id, 0); deliveries.clear();
         receive(DATA_PREFIX + 0, alice, new byte[16]);
-        assertTrue(deliveries.isEmpty()); // Only the receiver may send READY.
+        assertTrue(deliveries.isEmpty());
+        // Only the receiver may send READY.
         control(bob, 3, "Alice", id, 0); deliveries.clear();
         control(eve, 5, "Alice", id, 0);
         control(alice, 6, "Bob", id, 0);
@@ -157,6 +190,11 @@ class RawStreamRelayTest {
         assertEquals(1, deliveries.size());
     }
 
+    /**
+     * Verifies that end is directional and both ends release the slot.
+     *
+     * @throws Exception if the delegated operation cannot complete successfully
+     */
     @Test void endIsDirectionalAndBothEndsReleaseTheSlot() throws Exception {
         open(id); control(bob, 3, "Alice", id, 0); control(alice, 4, "Bob", id, 0);
         deliveries.clear();
@@ -169,6 +207,11 @@ class RawStreamRelayTest {
         assertControl(0, "Alice", 2, "Bob", next, 0);
     }
 
+    /**
+     * Verifies that reset disconnect and idle timeout release routes.
+     *
+     * @throws Exception if the delegated operation cannot complete successfully
+     */
     @Test void resetDisconnectAndIdleTimeoutReleaseRoutes() throws Exception {
         for (int action = 0; action < 3; action++) {
             open(id); deliveries.clear();
@@ -184,6 +227,11 @@ class RawStreamRelayTest {
         open(id); assertControl(0, "Alice", 2, "Bob", id, 0);
     }
 
+    /**
+     * Verifies that pool exhaustion and missing receiver abort open.
+     *
+     * @throws Exception if the delegated operation cannot complete successfully
+     */
     @Test void poolExhaustionAndMissingReceiverAbortOpen() throws Exception {
         open(id); open(UUID.randomUUID()); deliveries.clear();
         UUID third = UUID.randomUUID(); open(third);
@@ -192,23 +240,42 @@ class RawStreamRelayTest {
         assertControl(0, "Alice", 6, "Missing", third, -1);
     }
 
+    /**
+     * Verifies that shared control packet overload does not abort existing streams.
+     *
+     * @throws Exception if the delegated operation cannot complete successfully
+     */
     @Test void sharedControlPacketOverloadDoesNotAbortExistingStreams() throws Exception {
         assertSharedOverloadPreservesRoutes("ingressPackets");
     }
 
+    /**
+     * Verifies that shared control byte overload does not abort existing streams.
+     *
+     * @throws Exception if the delegated operation cannot complete successfully
+     */
     @Test void sharedControlByteOverloadDoesNotAbortExistingStreams() throws Exception {
         assertSharedOverloadPreservesRoutes("ingressBytes");
     }
 
+    /**
+     * Provides the assert shared overload preserves routes fixture operation used by the raw stream relay
+     * test regression scenarios.
+     *
+     * @param budget the budget supplied to this operation
+     * @throws Exception if the delegated operation cannot complete successfully
+     */
     private void assertSharedOverloadPreservesRoutes(String budget) throws Exception {
         open(id); control(bob, 3, "Alice", id, 0);
         UUID second = UUID.randomUUID(); open(second); control(bob, 3, "Alice", second, 1);
         Object bucket = field(field(relay, "controlTraffic"), budget);
         setField(bucket, "tokens", 0.0);
-        setField(bucket, "updated", Long.MAX_VALUE); // Freeze refill without wall-clock timing assumptions.
+        setField(bucket, "updated", Long.MAX_VALUE);
+        // Freeze refill without wall-clock timing assumptions.
         deliveries.clear();
         control(alice, 4, "Bob", id, 0);
-        assertTrue(deliveries.isEmpty()); // Drop the control, without ABORTing either route.
+        assertTrue(deliveries.isEmpty());
+        // Drop the control, without ABORTing either route.
         byte[] raw = new byte[16];
         for (int slot = 0; slot < 2; slot++) {
             receive(DATA_PREFIX + slot, alice, raw);
@@ -226,9 +293,15 @@ class RawStreamRelayTest {
         receive(DATA_PREFIX + 0, alice, raw);
         assertTrue(deliveries.isEmpty());
         receive(DATA_PREFIX + 0, bob, raw);
-        assertEquals(1, deliveries.size()); // END still closes only the sending direction after recovery.
+        assertEquals(1, deliveries.size());
+        // END still closes only the sending direction after recovery.
     }
 
+    /**
+     * Verifies that source control overload still aborts its routes.
+     *
+     * @throws Exception if the delegated operation cannot complete successfully
+     */
     @Test void sourceControlOverloadStillAbortsItsRoutes() throws Exception {
         open(id); control(bob, 3, "Alice", id, 0);
         Map<?, ?> sources = (Map<?, ?>) field(field(relay, "controlTraffic"), "sources");
@@ -245,23 +318,49 @@ class RawStreamRelayTest {
         assertTrue(deliveries.isEmpty());
     }
 
+    /**
+     * Provides the field fixture operation used by the raw stream relay test regression scenarios.
+     *
+     * @param owner the owner identifier associated with the stored key records
+     * @param name the name supplied to this operation
+     * @return the result described above
+     * @throws Exception if the delegated operation cannot complete successfully
+     */
     private static Object field(Object owner, String name) throws Exception {
         var field = owner.getClass().getDeclaredField(name);
         field.setAccessible(true);
         return field.get(owner);
     }
 
+    /**
+     * Provides the set field fixture operation used by the raw stream relay test regression scenarios.
+     *
+     * @param owner the owner identifier associated with the stored key records
+     * @param name the name supplied to this operation
+     * @param value the value supplied to this operation
+     * @throws Exception if the delegated operation cannot complete successfully
+     */
     private static void setField(Object owner, String name, Object value) throws Exception {
         var field = owner.getClass().getDeclaredField(name);
         field.setAccessible(true);
         field.set(owner, value);
     }
 
+    /**
+     * Verifies that exchange preserves body and uses authenticated source.
+     *
+     * @throws Exception if the delegated operation cannot complete successfully
+     */
     @Test void exchangePreservesBodyAndUsesAuthenticatedSource() throws Exception {
         receive(CONTROL, alice, packet(0, "Bob", id, -1, new byte[30000]));
         assertArrayEquals(packet(0, "Alice", id, -1, new byte[30000]), deliveries.getFirst().bytes);
     }
 
+    /**
+     * Verifies that malformed controls cannot allocate.
+     *
+     * @throws Exception if the delegated operation cannot complete successfully
+     */
     @Test void malformedControlsCannotAllocate() throws Exception {
         byte[] valid = packet(1, "Bob", id, -1, new byte[32]);
         for (int length = 0; length < valid.length; length++)
@@ -272,6 +371,11 @@ class RawStreamRelayTest {
         assertTrue(deliveries.isEmpty());
     }
 
+    /**
+     * Verifies that arbitrary data lengths and contents forward unchanged without aborting.
+     *
+     * @throws Exception if the delegated operation cannot complete successfully
+     */
     @Test void arbitraryDataLengthsAndContentsForwardUnchangedWithoutAborting() throws Exception {
         open(id); control(bob, 3, "Alice", id, 0); deliveries.clear();
         Random random = new Random(42);
@@ -290,6 +394,11 @@ class RawStreamRelayTest {
         }
     }
 
+    /**
+     * Verifies that bulk download preserves every record and can close and reopen.
+     *
+     * @throws Exception if the delegated operation cannot complete successfully
+     */
     @Test void bulkDownloadPreservesEveryRecordAndCanCloseAndReopen() throws Exception {
         open(id); control(bob, 3, "Alice", id, 0); deliveries.clear();
         // More than the old byte and packet burst budgets, in both directions.
@@ -316,6 +425,11 @@ class RawStreamRelayTest {
         assertControl(0, "Alice", 2, "Bob", next, 0);
     }
 
+    /**
+     * Verifies that download does not exhaust control budget or interrupt another stream.
+     *
+     * @throws Exception if the delegated operation cannot complete successfully
+     */
     @Test void downloadDoesNotExhaustControlBudgetOrInterruptAnotherStream() throws Exception {
         open(id); control(bob, 3, "Alice", id, 0); deliveries.clear();
         byte[] bytes = new byte[16400];
@@ -338,6 +452,11 @@ class RawStreamRelayTest {
         assertControl(0, "Bob", 5, "Alice", second, 1);
     }
 
+    /**
+     * Verifies that registration honors count and reload clears routes.
+     *
+     * @throws Exception if the delegated operation cannot complete successfully
+     */
     @Test void registrationHonorsCountAndReloadClearsRoutes() throws Exception {
         relay.register();
         assertEquals(Set.of(CONTROL, DATA_PREFIX + 0, DATA_PREFIX + 1), incoming);
@@ -354,6 +473,11 @@ class RawStreamRelayTest {
         }
     }
 
+    /**
+     * Verifies that disable cleans up without sending from a disabled plugin.
+     *
+     * @throws Exception if the delegated operation cannot complete successfully
+     */
     @Test void disableCleansUpWithoutSendingFromADisabledPlugin() throws Exception {
         relay.register(); open(id); deliveries.clear();
         enabled = false;
@@ -363,10 +487,38 @@ class RawStreamRelayTest {
         assertTrue(deliveries.isEmpty());
     }
 
+    /**
+     * Provides the open fixture operation used by the raw stream relay test regression scenarios.
+     *
+     * @param stream the stream supplied to this operation
+     * @throws Exception if the delegated operation cannot complete successfully
+     */
     private void open(UUID stream) throws Exception { control(alice, 1, "Bob", stream, -1); }
+    /**
+     * Provides the control fixture operation used by the raw stream relay test regression scenarios.
+     *
+     * @param source the source supplied to this operation
+     * @param kind the kind supplied to this operation
+     * @param peer the peer identifier associated with this operation
+     * @param stream the stream supplied to this operation
+     * @param slot the slot supplied to this operation
+     * @throws Exception if the delegated operation cannot complete successfully
+     */
     private void control(Player source, int kind, String peer, UUID stream, int slot) throws Exception {
         receive(CONTROL, source, packet(kind, peer, stream, slot, new byte[32]));
     }
+    /**
+     * Provides the assert control fixture operation used by the raw stream relay test regression
+     * scenarios.
+     *
+     * @param index the index supplied to this operation
+     * @param target the target supplied to this operation
+     * @param kind the kind supplied to this operation
+     * @param peer the peer identifier associated with this operation
+     * @param stream the stream supplied to this operation
+     * @param slot the slot supplied to this operation
+     * @throws Exception if the delegated operation cannot complete successfully
+     */
     private void assertControl(int index, String target, int kind, String peer, UUID stream, int slot) throws Exception {
         Delivery d = deliveries.get(index);
         assertEquals(target, d.target); assertEquals(CONTROL, d.channel);
@@ -374,6 +526,17 @@ class RawStreamRelayTest {
     }
 
     // Independent FriendlyByteBuf wire fixture; fixed integers are big endian.
+    /**
+     * Provides the packet fixture operation used by the raw stream relay test regression scenarios.
+     *
+     * @param kind the kind supplied to this operation
+     * @param peer the peer identifier associated with this operation
+     * @param id the id supplied to this operation
+     * @param slot the slot supplied to this operation
+     * @param body the body supplied to this operation
+     * @return the resulting array produced by this operation
+     * @throws Exception if the delegated operation cannot complete successfully
+     */
     private static byte[] packet(int kind, String peer, UUID id, int slot, byte[] body) throws Exception {
         ByteArrayOutputStream bytes = new ByteArrayOutputStream(); DataOutputStream out = new DataOutputStream(bytes);
         varInt(out, kind); utf(out, peer);
@@ -381,12 +544,33 @@ class RawStreamRelayTest {
         utf(out, "example:stream"); utf(out, "session"); out.writeLong(7);
         varInt(out, body.length); out.write(body); return bytes.toByteArray();
     }
+    /**
+     * Provides the utf fixture operation used by the raw stream relay test regression scenarios.
+     *
+     * @param out the out supplied to this operation
+     * @param text the text supplied to this operation
+     * @throws Exception if the delegated operation cannot complete successfully
+     */
     private static void utf(DataOutputStream out, String text) throws Exception {
         byte[] bytes = text.getBytes(StandardCharsets.UTF_8); varInt(out, bytes.length); out.write(bytes);
     }
+    /**
+     * Provides the var int fixture operation used by the raw stream relay test regression scenarios.
+     *
+     * @param out the out supplied to this operation
+     * @param value the value supplied to this operation
+     * @throws Exception if the delegated operation cannot complete successfully
+     */
     private static void varInt(DataOutputStream out, int value) throws Exception {
         do { int part = value & 127; value >>>= 7; out.writeByte(value == 0 ? part : part | 128); } while (value != 0);
     }
+    /**
+     * Provides the player fixture operation used by the raw stream relay test regression scenarios.
+     *
+     * @param name the name supplied to this operation
+     * @param channels the channels supplied to this operation
+     * @return the result described above
+     */
     private Player player(String name, Set<String> channels) {
         UUID uuid = UUID.randomUUID();
         Player player = proxy(Player.class, (p, m, a) -> {
@@ -403,6 +587,13 @@ class RawStreamRelayTest {
         });
         players.put(name, player); return player;
     }
+    /**
+     * Provides the proxy fixture operation used by the raw stream relay test regression scenarios.
+     *
+     * @param type the type supplied to this operation
+     * @param handler the handler supplied to this operation
+     * @return the result described above
+     */
     private static <T> T proxy(Class<T> type, InvocationHandler handler) {
         return type.cast(Proxy.newProxyInstance(type.getClassLoader(), new Class<?>[]{type}, handler));
     }

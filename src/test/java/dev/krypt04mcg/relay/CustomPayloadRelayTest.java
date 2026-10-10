@@ -46,6 +46,9 @@ class CustomPayloadRelayTest {
     private final CustomPayloadRelay relay = new CustomPayloadRelay(plugin);
     private final Player source = player("Alice", true, Set.of());
 
+    /**
+     * Verifies that forwards only to data subscriber with authenticated sender.
+     */
     @Test void forwardsOnlyToDataSubscriberWithAuthenticatedSender() {
         player("Bob", true, Set.of(DATA));
         player("Carol", true, Set.of(DATA));
@@ -60,6 +63,9 @@ class CustomPayloadRelayTest {
         assertArrayEquals(packet("Alice", fragment, 1), delivery.bytes());
     }
 
+    /**
+     * Verifies that missing offline and unsubscribed targets are dropped.
+     */
     @Test void missingOfflineAndUnsubscribedTargetsAreDropped() {
         player("Offline", false, Set.of(DATA));
         player("ChatFileOnly", true, Set.of(CustomPayloadRelay.CHANNEL, "krypt04mcg:file_share"));
@@ -70,6 +76,9 @@ class CustomPayloadRelayTest {
         assertTrue(deliveries.isEmpty());
     }
 
+    /**
+     * Verifies that accepts maximum minecraft utf length.
+     */
     @Test void acceptsMaximumMinecraftUtfLength() {
         player("Bob", true, Set.of(DATA));
         String fragment = "界".repeat(12100);
@@ -78,6 +87,9 @@ class CustomPayloadRelayTest {
         assertArrayEquals(packet("Alice", fragment, 1), deliveries.getFirst().bytes());
     }
 
+    /**
+     * Verifies that rejects malformed packets and unsupported versions.
+     */
     @Test void rejectsMalformedPacketsAndUnsupportedVersions() {
         player("Bob", true, Set.of(DATA));
         byte[] valid = packet("Bob", "x", 1);
@@ -105,12 +117,18 @@ class CustomPayloadRelayTest {
         assertEquals(1, deliveries.size());
     }
 
+    /**
+     * Verifies that oversized ingress is dropped.
+     */
     @Test void oversizedIngressIsDropped() {
         player("Bob", true, Set.of(DATA));
         relay.onPluginMessageReceived(DATA, source, new byte[100001]);
         assertTrue(deliveries.isEmpty());
     }
 
+    /**
+     * Verifies that registers and unregisters data with existing channels.
+     */
     @Test void registersAndUnregistersDataWithExistingChannels() {
         Set<String> expected = Set.of(DATA, TUNNEL, CustomPayloadRelay.CHANNEL,
                 "krypt04mcg:public_key", "krypt04mcg:file_share");
@@ -125,6 +143,9 @@ class CustomPayloadRelayTest {
         assertEquals(expected, outgoing);
     }
 
+    /**
+     * Verifies that forwards binary tunnel unchanged with authenticated sender.
+     */
     @Test void forwardsBinaryTunnelUnchangedWithAuthenticatedSender() {
         player("Bob", true, Set.of(TUNNEL));
         byte[] envelope = new byte[24 * 1024];
@@ -135,6 +156,9 @@ class CustomPayloadRelayTest {
         assertArrayEquals(tunnel("Alice", envelope), deliveries.getFirst().bytes());
     }
 
+    /**
+     * Verifies that rejects malformed tunnel and does not use other subscriptions.
+     */
     @Test void rejectsMalformedTunnelAndDoesNotUseOtherSubscriptions() {
         player("Bob", true, Set.of(TUNNEL));
         player("DataOnly", true, Set.of(DATA));
@@ -155,6 +179,13 @@ class CustomPayloadRelayTest {
         assertEquals(1, deliveries.size());
     }
 
+    /**
+     * Provides the tunnel fixture operation used by the custom payload relay test regression scenarios.
+     *
+     * @param peer the peer identifier associated with this operation
+     * @param envelope the envelope supplied to this operation
+     * @return the resulting array produced by this operation
+     */
     private static byte[] tunnel(String peer, byte[] envelope) {
         ByteArrayOutputStream output = new ByteArrayOutputStream();
         byte[] name = peer.getBytes(StandardCharsets.UTF_8);
@@ -165,6 +196,9 @@ class CustomPayloadRelayTest {
         return output.toByteArray();
     }
 
+    /**
+     * Verifies that api bursts are lossless and independent of legacy quotas.
+     */
     @Test void apiBurstsAreLosslessAndIndependentOfLegacyQuotas() {
         player("Bob", true, Set.of(TUNNEL, DATA, CustomPayloadRelay.CHANNEL));
         byte[] legacy = packet("Bob", "x", 1);
@@ -182,6 +216,14 @@ class CustomPayloadRelayTest {
         }
     }
 
+    /**
+     * Provides the player fixture operation used by the custom payload relay test regression scenarios.
+     *
+     * @param name the name supplied to this operation
+     * @param online the online supplied to this operation
+     * @param channels the channels supplied to this operation
+     * @return the result described above
+     */
     private Player player(String name, boolean online, Set<String> channels) {
         UUID id = UUID.randomUUID();
         Player player = proxy(Player.class, (p, method, args) -> switch (method.getName()) {
@@ -200,11 +242,26 @@ class CustomPayloadRelayTest {
         return player;
     }
 
+    /**
+     * Provides the proxy fixture operation used by the custom payload relay test regression scenarios.
+     *
+     * @param type the type supplied to this operation
+     * @param handler the handler supplied to this operation
+     * @return the result described above
+     */
     private static <T> T proxy(Class<T> type, InvocationHandler handler) {
         return type.cast(Proxy.newProxyInstance(type.getClassLoader(), new Class<?>[]{type}, handler));
     }
 
     // Independent wire fixture: Minecraft UTF-8 with VarInt byte lengths, never writeUTF.
+    /**
+     * Provides the packet fixture operation used by the custom payload relay test regression scenarios.
+     *
+     * @param peer the peer identifier associated with this operation
+     * @param fragment the individual fragment or delivery record
+     * @param version the version supplied to this operation
+     * @return the resulting array produced by this operation
+     */
     private static byte[] packet(String peer, String fragment, int version) {
         ByteArrayOutputStream output = new ByteArrayOutputStream();
         for (String value : List.of(peer, fragment)) {
@@ -216,6 +273,12 @@ class CustomPayloadRelayTest {
         return output.toByteArray();
     }
 
+    /**
+     * Provides the var int fixture operation used by the custom payload relay test regression scenarios.
+     *
+     * @param output the destination buffer or stream for produced data
+     * @param value the value supplied to this operation
+     */
     private static void varInt(ByteArrayOutputStream output, int value) {
         do {
             int next = value & 127;

@@ -5,6 +5,9 @@ import java.util.UUID;
 import static org.junit.jupiter.api.Assertions.*;
 
 class RelayTrafficLimiterTest {
+    /**
+     * Verifies that tiny packets cannot bypass forwarding work budget.
+     */
     @Test void tinyPacketsCannotBypassForwardingWorkBudget() {
         var limiter = new RelayTrafficLimiter();
         UUID sender = UUID.randomUUID();
@@ -14,6 +17,9 @@ class RelayTrafficLimiterTest {
         assertTrue(limiter.forward(sender, 1, 1000));
     }
 
+    /**
+     * Verifies that total forwarding work is bounded across sources.
+     */
     @Test void totalForwardingWorkIsBoundedAcrossSources() {
         var limiter = new RelayTrafficLimiter();
         for (int source = 0; source < 4; source++) {
@@ -27,6 +33,9 @@ class RelayTrafficLimiterTest {
         assertTrue(limiter.forward(sender, 1, 1000));
     }
 
+    /**
+     * Verifies that broadcast scanning has a budget even when nobody subscribes.
+     */
     @Test void broadcastScanningHasABudgetEvenWhenNobodySubscribes() {
         var limiter = new RelayTrafficLimiter();
         for (int source = 0; source < 4; source++) {
@@ -41,6 +50,9 @@ class RelayTrafficLimiterTest {
         assertTrue(limiter.visitBroadcastRecipient(sender, 1000));
     }
 
+    /**
+     * Verifies that aggregate ingress is bounded across many senders.
+     */
     @Test void aggregateIngressIsBoundedAcrossManySenders() {
         var limiter = new RelayTrafficLimiter();
         int accepted = 0;
@@ -56,6 +68,9 @@ class RelayTrafficLimiterTest {
         assertTrue(limiter.receive(UUID.randomUUID(), 10, 1000));
     }
 
+    /**
+     * Verifies that aggregate byte budget bounds decode work and clear releases sources.
+     */
     @Test void aggregateByteBudgetBoundsDecodeWorkAndClearReleasesSources() {
         var limiter = new RelayTrafficLimiter();
         int accepted = 0;
@@ -74,6 +89,9 @@ class RelayTrafficLimiterTest {
         assertFalse(limiter.forward(sender, 1, 1000));
     }
 
+    /**
+     * Verifies that throttles floods and recovers without affecting other sources.
+     */
     @Test void throttlesFloodsAndRecoversWithoutAffectingOtherSources() {
         var limiter = new RelayTrafficLimiter();
         UUID alice = UUID.randomUUID(), bob = UUID.randomUUID();
@@ -84,6 +102,9 @@ class RelayTrafficLimiterTest {
         assertTrue(limiter.receive(alice, 10, 1000));
     }
 
+    /**
+     * Verifies that source byte limit is distinct from shared overload.
+     */
     @Test void sourceByteLimitIsDistinctFromSharedOverload() {
         var limiter = new RelayTrafficLimiter();
         UUID sender = UUID.randomUUID();
@@ -92,6 +113,9 @@ class RelayTrafficLimiterTest {
         assertTrue(limiter.receive(UUID.randomUUID(), 100000, 0));
     }
 
+    /**
+     * Verifies that source table capacity is shared overload.
+     */
     @Test void sourceTableCapacityIsSharedOverload() {
         var limiter = new RelayTrafficLimiter();
         UUID existing = UUID.randomUUID();
@@ -103,6 +127,9 @@ class RelayTrafficLimiterTest {
         assertTrue(limiter.receive(UUID.randomUUID(), 1, 60001));
     }
 
+    /**
+     * Verifies that charges each broadcast recipient and bounds amplification.
+     */
     @Test void chargesEachBroadcastRecipientAndBoundsAmplification() {
         var limiter = new RelayTrafficLimiter();
         UUID sender = UUID.randomUUID();
@@ -115,6 +142,9 @@ class RelayTrafficLimiterTest {
         assertTrue(limiter.forward(sender, 12000, 1000));
     }
 
+    /**
+     * Verifies that allows paced ten mi b transfer.
+     */
     @Test void allowsPacedTenMiBTransfer() {
         var limiter = new RelayTrafficLimiter();
         UUID sender = UUID.randomUUID();
@@ -125,6 +155,9 @@ class RelayTrafficLimiterTest {
         }
     }
 
+    /**
+     * Verifies that rejects malformed utf8 and overflowing varints.
+     */
     @Test void rejectsMalformedUtf8AndOverflowingVarints() {
         assertThrows(IllegalArgumentException.class, () -> CustomPayloadRelay.ServerboundPayload.decode(
                 new byte[]{1, (byte) 0xFF, 1, 'x', 1}));

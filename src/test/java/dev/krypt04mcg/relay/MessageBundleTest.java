@@ -11,12 +11,24 @@ import java.util.logging.Logger;
 import static org.junit.jupiter.api.Assertions.*;
 
 class MessageBundleTest {
+    /**
+     * Verifies that missing custom language falls back without breaking reload.
+     *
+     * @param directory the directory supplied to this operation
+     * @throws Exception if the delegated operation cannot complete successfully
+     */
     @Test void missingCustomLanguageFallsBackWithoutBreakingReload(@TempDir Path directory) throws Exception {
         Files.writeString(directory.resolve("messages_en_us.yml"), "test: fallback\n");
         assertEquals("fallback", MessageBundle.load(directory.toFile(), "typo", Logger.getAnonymousLogger()).text("test"));
         assertFalse(Files.exists(directory.resolve("messages_typo.yml")));
     }
 
+    /**
+     * Verifies that existing custom language retains english fallback.
+     *
+     * @param directory the directory supplied to this operation
+     * @throws Exception if the delegated operation cannot complete successfully
+     */
     @Test void existingCustomLanguageRetainsEnglishFallback(@TempDir Path directory) throws Exception {
         Files.writeString(directory.resolve("messages_en_us.yml"), "test: fallback\nother: retained\n");
         Files.writeString(directory.resolve("messages_de_de.yml"), "test: custom\n");
@@ -25,6 +37,9 @@ class MessageBundleTest {
         assertEquals("retained", bundle.text("other"));
     }
 
+    /**
+     * Verifies that untrusted values are not expanded or interpreted as color codes.
+     */
     @Test void untrustedValuesAreNotExpandedOrInterpretedAsColorCodes() {
         var config = new YamlConfiguration();
         config.set("test", "&a%receiver% from %sender%");
@@ -33,6 +48,9 @@ class MessageBundleTest {
                 bundle.text("test", "receiver", "%sender% &c$\\", "sender", "Alice"));
     }
 
+    /**
+     * Verifies that supports fallback and unknown placeholders.
+     */
     @Test void supportsFallbackAndUnknownPlaceholders() {
         var fallback = new YamlConfiguration();
         fallback.set("test", "%sender% %missing%");
@@ -41,6 +59,9 @@ class MessageBundleTest {
         assertEquals("unknown", bundle.text("unknown"));
     }
 
+    /**
+     * Verifies that language names cannot become paths and aliases still work.
+     */
     @Test void languageNamesCannotBecomePathsAndAliasesStillWork() {
         assertEquals("en_us", MessageBundle.normalize("../../outside"));
         assertEquals("en_us", MessageBundle.normalize("..\\outside"));

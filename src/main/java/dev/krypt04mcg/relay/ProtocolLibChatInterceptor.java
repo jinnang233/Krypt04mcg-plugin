@@ -24,16 +24,31 @@ final class ProtocolLibChatInterceptor {
     private Runnable unregisterAction;
     private volatile boolean active;
 
+    /**
+     * Creates a protocol lib chat interceptor with the supplied dependencies and initial state.
+     *
+     * @param plugin the plugin supplied to this operation
+     * @param config the config supplied to this operation
+     * @param relay the relay supplied to this operation
+     */
     ProtocolLibChatInterceptor(Krypt04McgRelayPlugin plugin, RelayConfig config, EncryptedChatRelay relay) {
         this.plugin = plugin;
         this.config = config;
         this.relay = relay;
     }
 
+    /**
+     * Registers the supported callbacks and channels for the protocol lib chat interceptor.
+     */
     void register() {
         var manager = ProtocolLibrary.getProtocolManager();
         var listener = new PacketAdapter(plugin, ListenerPriority.LOWEST,
                 supportedClientMessagePackets()) {
+            /**
+             * Handles the packet receiving callback for the protocol lib chat interceptor.
+             *
+             * @param event the event supplied to this operation
+             */
             @Override
             public void onPacketReceiving(PacketEvent event) {
                 if (!active || config.kickKrypt04McgChatSpam()) return;
@@ -63,6 +78,9 @@ final class ProtocolLibChatInterceptor {
         manager.addPacketListener(listener);
     }
 
+    /**
+     * Removes the registered callbacks and channels from the protocol lib chat interceptor.
+     */
     void unregister() {
         active = false;
         Runnable cleanup = unregisterAction;
@@ -75,6 +93,11 @@ final class ProtocolLibChatInterceptor {
         }
     }
 
+    /**
+     * Performs the supported client message packets operation for the protocol lib chat interceptor.
+     *
+     * @return the result described above
+     */
     private static List<PacketType> supportedClientMessagePackets() {
         return Stream.of(
                         PacketType.Play.Client.CHAT,
@@ -84,6 +107,12 @@ final class ProtocolLibChatInterceptor {
                 .toList();
     }
 
+    /**
+     * Returns the recorded null for the protocol lib chat interceptor.
+     *
+     * @param command the command supplied to this operation
+     * @return the result described above
+     */
     static String extractPrivateMessageBody(String command) {
         // Bound regex work before vanilla validates an intercepted command packet.
         if (command == null || command.length() > 512) {
@@ -93,6 +122,12 @@ final class ProtocolLibChatInterceptor {
         return matcher.matches() ? matcher.group(1) : null;
     }
 
+    /**
+     * Reads message from the input used by the protocol lib chat interceptor.
+     *
+     * @param event the event supplied to this operation
+     * @return the result described above
+     */
     private static String readMessage(PacketEvent event) {
         try {
             PacketContainer packet = event.getPacket();

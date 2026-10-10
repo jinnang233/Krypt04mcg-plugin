@@ -8,6 +8,9 @@ import java.util.concurrent.atomic.AtomicLong;
 import static org.junit.jupiter.api.Assertions.*;
 
 class FragmentCollectorTest {
+    /**
+     * Verifies that one player cannot consume all global assembly slots.
+     */
     @Test void onePlayerCannotConsumeAllGlobalAssemblySlots() {
         var bounded = new FragmentCollector(Duration.ofSeconds(5), 128, 2, clock::get);
         UUID victim = UUID.randomUUID();
@@ -19,6 +22,9 @@ class FragmentCollectorTest {
         assertEquals(16, bounded.cleanupTimedOut());
     }
 
+    /**
+     * Verifies that buffered text can exceed former per player and global quotas.
+     */
     @Test void bufferedTextCanExceedFormerPerPlayerAndGlobalQuotas() {
         var bounded = new FragmentCollector(Duration.ofSeconds(120), 128, 2048, clock::get);
         String text = "A".repeat(180);
@@ -39,6 +45,9 @@ class FragmentCollectorTest {
                 new Fragment(ID, 0, 1, "YQ"), "fragment").orElseThrow().packetBytes());
     }
 
+    /**
+     * Verifies that maximum packet round trips at default fragment size and pacing.
+     */
     @Test void maximumPacketRoundTripsAtDefaultFragmentSizeAndPacing() {
         var bounded = new FragmentCollector(Duration.ofSeconds(120), 128, 2048, clock::get);
         byte[] packet = new byte[FragmentCollector.MAX_PACKET_BYTES];
@@ -58,6 +67,9 @@ class FragmentCollectorTest {
         assertTrue(clock.get() < 120_000_000_000L);
     }
 
+    /**
+     * Verifies that completing or removing a player releases their quota.
+     */
     @Test void completingOrRemovingAPlayerReleasesTheirQuota() {
         var bounded = new FragmentCollector(Duration.ofSeconds(5), 128, 2, clock::get);
         for (int i = 0; i < 16; i++) bounded.accept(sender, new Fragment(Integer.toString(i), 0, 2, "AQ"), "first");
@@ -75,6 +87,9 @@ class FragmentCollectorTest {
                 new Fragment(ID, 0, 1, "YQ"), "fragment").orElseThrow().packetBytes());
     }
 
+    /**
+     * Verifies that hex case aliases do not split an assembly.
+     */
     @Test void hexCaseAliasesDoNotSplitAnAssembly() {
         collector.accept(sender, new Fragment(ID, 0, 2, "AQ"), "first");
         assertArrayEquals(new byte[]{1, 2, 3}, collector.accept(sender,
@@ -83,6 +98,9 @@ class FragmentCollectorTest {
         assertEquals(0, collector.cleanupTimedOut());
     }
 
+    /**
+     * Verifies that oversized packet releases only its own assembly.
+     */
     @Test void oversizedPacketReleasesOnlyItsOwnAssembly() {
         var bounded = new FragmentCollector(Duration.ofSeconds(5), 128, 2048, clock::get);
         UUID victim = UUID.randomUUID();
@@ -98,6 +116,9 @@ class FragmentCollectorTest {
         assertEquals(0, bounded.cleanupTimedOut());
     }
 
+    /**
+     * Verifies that decoded packet one byte over limit does not leave pending state.
+     */
     @Test void decodedPacketOneByteOverLimitDoesNotLeavePendingState() {
         var bounded = new FragmentCollector(Duration.ofSeconds(5), 128, 2048, clock::get);
         String encoded = java.util.Base64.getUrlEncoder().withoutPadding()
@@ -114,6 +135,9 @@ class FragmentCollectorTest {
         assertEquals(0, bounded.cleanupTimedOut());
     }
 
+    /**
+     * Verifies that invalid completed encoding does not leave pending state.
+     */
     @Test void invalidCompletedEncodingDoesNotLeavePendingState() {
         assertThrows(IllegalArgumentException.class, () -> collector.accept(sender,
                 new Fragment(ID, 0, 1, "A"), "fragment"));
@@ -126,10 +150,20 @@ class FragmentCollectorTest {
     private final UUID sender = UUID.randomUUID();
     private final FragmentCollector collector = new FragmentCollector(Duration.ofSeconds(5), 2, 2, clock::get);
 
+    /**
+     * Provides the add fixture operation used by the fragment collector test regression scenarios.
+     *
+     * @param source the source supplied to this operation
+     * @param id the id supplied to this operation
+     * @param index the index supplied to this operation
+     */
     private void add(UUID source, String id, int index) {
         collector.accept(source, new Fragment(id, index, 2, "YQ"), "fragment");
     }
 
+    /**
+     * Verifies that expires without more traffic and duplicates cannot keep state alive.
+     */
     @Test void expiresWithoutMoreTrafficAndDuplicatesCannotKeepStateAlive() {
         add(sender, ID, 0);
         clock.set(4_000_000_000L);
@@ -139,6 +173,9 @@ class FragmentCollectorTest {
         assertEquals(0, collector.cleanupTimedOut());
     }
 
+    /**
+     * Verifies that capacity rejects new message flood and preserves admitted messages.
+     */
     @Test void capacityRejectsNewMessageFloodAndPreservesAdmittedMessages() {
         UUID second = UUID.randomUUID(), third = UUID.randomUUID();
         collector.accept(sender, new Fragment(ID, 0, 2, "AQ"), "first");
@@ -156,6 +193,9 @@ class FragmentCollectorTest {
         assertEquals(0, collector.cleanupTimedOut());
     }
 
+    /**
+     * Verifies that quit releases capacity for previously rejected message.
+     */
     @Test void quitReleasesCapacityForPreviouslyRejectedMessage() {
         UUID second = UUID.randomUUID(), third = UUID.randomUUID();
         add(sender, ID, 0);
@@ -167,6 +207,9 @@ class FragmentCollectorTest {
         assertEquals(2, collector.cleanupTimedOut());
     }
 
+    /**
+     * Verifies that rejected messages do not extend deadlines and expired slots can be reused.
+     */
     @Test void rejectedMessagesDoNotExtendDeadlinesAndExpiredSlotsCanBeReused() {
         UUID second = UUID.randomUUID(), third = UUID.randomUUID();
         add(sender, ID, 0);
@@ -179,6 +222,9 @@ class FragmentCollectorTest {
                 new Fragment(ID, 0, 1, "YQ"), "fragment").orElseThrow().packetBytes());
     }
 
+    /**
+     * Verifies that validates direct callers and unsafe limits.
+     */
     @Test void validatesDirectCallersAndUnsafeLimits() {
         assertThrows(IllegalArgumentException.class, () -> collector.accept(sender,
                 new Fragment(ID, -1, 2, "YQ"), "fragment"));

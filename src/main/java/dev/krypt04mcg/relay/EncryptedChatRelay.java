@@ -35,6 +35,13 @@ public final class EncryptedChatRelay implements Listener {
     private long lastRejection;
     private boolean rejectionLogged;
 
+    /**
+     * Creates a encrypted chat relay with the supplied dependencies and initial state.
+     *
+     * @param plugin the plugin supplied to this operation
+     * @param config the config supplied to this operation
+     * @param messages the messages supplied to this operation
+     */
     public EncryptedChatRelay(Krypt04McgRelayPlugin plugin, RelayConfig config, MessageBundle messages) {
         this.plugin = plugin;
         this.config = config;
@@ -44,6 +51,11 @@ public final class EncryptedChatRelay implements Listener {
         pump = Bukkit.getScheduler().runTaskTimer(plugin, this::drain, 1L, 1L);
     }
 
+    /**
+     * Handles the chat callback for the directed encrypted-chat relay.
+     *
+     * @param event the event supplied to this operation
+     */
     @EventHandler(priority = EventPriority.LOWEST, ignoreCancelled = true)
     public void onChat(AsyncPlayerChatEvent event) {
         if (!isKrypt04McgMessage(event.getMessage())) {
@@ -55,16 +67,33 @@ public final class EncryptedChatRelay implements Listener {
         handleKrypt04McgMessage(event.getPlayer(), event.getMessage());
     }
 
+    /**
+     * Reports whether krypt04 mcg message holds for the directed encrypted-chat relay.
+     *
+     * @param rawMessage the raw message supplied to this operation
+     * @return whether the condition or operation described above succeeds
+     */
     boolean isKrypt04McgMessage(String rawMessage) {
         return rawMessage != null && rawMessage.contains(FragmentService.PREFIX);
     }
 
+    /**
+     * Processes krypt04 mcg message using the directed encrypted-chat relay state and checks.
+     *
+     * @param sender the sender or source associated with this operation
+     * @param rawMessage the raw message supplied to this operation
+     */
     synchronized void handleKrypt04McgMessage(Player sender, String rawMessage) {
         if (closed || rawMessage == null || rawMessage.length() > 512) return;
         if (!traffic.receive(sender.getUniqueId(), rawMessage.length() * 3, System.nanoTime() / 1_000_000)) return;
         inbox.offer(new Incoming(sender, rawMessage));
     }
 
+    /**
+     * Interleaves bounded incoming and outgoing work on the server thread and checks the shared per-tick
+     * elapsed budget between operations. A single decode/send can still exceed that budget; this is
+     * bounded scheduling, not a hard real-time guarantee.
+     */
     private void drain() {
         if (closed) return;
         collector.cleanupTimedOut();
@@ -80,6 +109,12 @@ public final class EncryptedChatRelay implements Listener {
         }
     }
 
+    /**
+     * Performs the process operation for the directed encrypted-chat relay.
+     *
+     * @param sender the sender or source associated with this operation
+     * @param rawMessage the raw message supplied to this operation
+     */
     private void process(Player sender, String rawMessage) {
         Optional<String> fragmentLine = fragmentService.extractFragmentLine(rawMessage);
         if (fragmentLine.isEmpty()) {
@@ -97,6 +132,9 @@ public final class EncryptedChatRelay implements Listener {
         }
     }
 
+    /**
+     * Clears retained state in the directed encrypted-chat relay.
+     */
     public synchronized void clear() {
         closed = true;
         inbox.close();
@@ -106,6 +144,9 @@ public final class EncryptedChatRelay implements Listener {
         traffic.clear();
     }
 
+    /**
+     * Performs the announce to online players operation for the directed encrypted-chat relay.
+     */
     public void announceToOnlinePlayers() {
         if (!config.announcePluginInstalled()) {
             return;
@@ -115,6 +156,11 @@ public final class EncryptedChatRelay implements Listener {
         }
     }
 
+    /**
+     * Handles the join callback for the directed encrypted-chat relay.
+     *
+     * @param event the event supplied to this operation
+     */
     @EventHandler(priority = EventPriority.MONITOR)
     public void onJoin(PlayerJoinEvent event) {
         if (!config.announcePluginInstalled()) {
@@ -123,6 +169,11 @@ public final class EncryptedChatRelay implements Listener {
         sendPluginInstalledNotice(event.getPlayer());
     }
 
+    /**
+     * Handles the quit callback for the directed encrypted-chat relay.
+     *
+     * @param event the event supplied to this operation
+     */
     @EventHandler
     public void onQuit(PlayerQuitEvent event) {
         collector.removeSender(event.getPlayer().getUniqueId());
@@ -131,6 +182,14 @@ public final class EncryptedChatRelay implements Listener {
 
     private record Incoming(Player sender, String message) {}
 
+    /**
+     * Decodes routing metadata, optionally enforces packet-sender equality with the authenticated Bukkit
+     * player, and queues raw fragments for an online target. The server does not decrypt the body or
+     * verify the end-to-end signature; routing is not a proof of the claimed cryptographic identity.
+     *
+     * @param sender the sender or source associated with this operation
+     * @param message the message supplied to this operation
+     */
     private void route(Player sender, FragmentCollector.CompleteMessage message) {
         String senderName = sender.getName();
         try {
@@ -161,6 +220,11 @@ public final class EncryptedChatRelay implements Listener {
         }
     }
 
+    /**
+     * Performs the forward operation for the directed encrypted-chat relay.
+     *
+     * @param outgoing the outgoing supplied to this operation
+     */
     private void forward(FragmentOutbox.Forward<Player> outgoing) {
         Player sender = outgoing.sender();
         Player target = outgoing.target();
@@ -175,6 +239,12 @@ public final class EncryptedChatRelay implements Listener {
         }
     }
 
+    /**
+     * Performs the notify offline operation for the directed encrypted-chat relay.
+     *
+     * @param senderName the sender name supplied to this operation
+     * @param receiverName the receiver name supplied to this operation
+     */
     private void notifyOffline(String senderName, String receiverName) {
         if (!config.notifyOfflineReceiver()) {
             return;
@@ -185,6 +255,13 @@ public final class EncryptedChatRelay implements Listener {
         }
     }
 
+    /**
+     * Returns the recorded false for the directed encrypted-chat relay.
+     *
+     * @param senderName the sender name supplied to this operation
+     * @param reason the reason supplied to this operation
+     * @return whether the condition or operation described above succeeds
+     */
     private boolean logRejected(String senderName, String reason) {
         long now = System.nanoTime();
         if (rejectionLogged && now - lastRejection < 1_000_000_000L) return false;
@@ -195,10 +272,23 @@ public final class EncryptedChatRelay implements Listener {
         return true;
     }
 
+    /**
+     * Submits plugin installed notice through the directed encrypted-chat relay path. Local submission
+     * does not by itself acknowledge remote receipt.
+     *
+     * @param player the player supplied to this operation
+     */
     private void sendPluginInstalledNotice(Player player) {
         player.sendMessage(ChatColor.AQUA + messages.text("plugin-installed-notice"));
     }
 
+    /**
+     * Performs the vanilla chat line operation for the directed encrypted-chat relay.
+     *
+     * @param senderName the sender name supplied to this operation
+     * @param message the message supplied to this operation
+     * @return the result described above
+     */
     private static String vanillaChatLine(String senderName, String message) {
         return "<" + senderName + "> " + message;
     }

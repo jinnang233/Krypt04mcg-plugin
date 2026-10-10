@@ -11,6 +11,12 @@ public final class FragmentService {
     private static final Pattern HEX_16_BYTES = Pattern.compile("[0-9a-fA-F]{32}");
     private static final Pattern BASE64_URL = Pattern.compile("[A-Za-z0-9_-]+={0,2}");
 
+    /**
+     * Performs the extract fragment line operation for the chat wire fragmentation.
+     *
+     * @param raw the raw supplied to this operation
+     * @return the result described above
+     */
     public Optional<String> extractFragmentLine(String raw) {
         if (raw == null) {
             return Optional.empty();
@@ -22,6 +28,12 @@ public final class FragmentService {
         return Optional.of(raw.substring(index).trim());
     }
 
+    /**
+     * Parses the supplied representation for the chat wire fragmentation.
+     *
+     * @param message the message supplied to this operation
+     * @return the result described above
+     */
     public Fragment parse(String message) {
         if (message == null || !message.startsWith(PREFIX + " ")) {
             throw new IllegalArgumentException("not a Krypt04Mcg fragment");
@@ -47,6 +59,13 @@ public final class FragmentService {
         return new Fragment(parts[1].toLowerCase(), index, total, parts[4]);
     }
 
+    /**
+     * Parses int for the chat wire fragmentation.
+     *
+     * @param value the value supplied to this operation
+     * @param field the field supplied to this operation
+     * @return the result described above
+     */
     private static int parseInt(String value, String field) {
         try {
             return Integer.parseInt(value);

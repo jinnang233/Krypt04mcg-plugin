@@ -16,6 +16,14 @@ public final class PacketCodec {
     private static final int MAX_STRING_BYTES = 4096;
     private static final int MAX_BYTES32_FIELD_BYTES = 1024 * 1024;
 
+    /**
+     * Parses a bounded versioned packet, validates lengths and field combinations, and rejects truncation
+     * or trailing bytes. Decoded sender/routing fields are claims until the transport and cryptographic
+     * receive paths validate them; parsing is not signature verification.
+     *
+     * @param encoded the encoded bytes to parse or verify
+     * @return the result described above
+     */
     public EncryptedPacket decode(byte[] encoded) {
         try {
             DataInputStream in = new DataInputStream(new ByteArrayInputStream(encoded));
@@ -66,6 +74,15 @@ public final class PacketCodec {
         }
     }
 
+    /**
+     * Reads a bounded length-prefixed UTF-8 field. The client codec uses strict malformed-input reporting
+     * because these strings are reconstructed into AAD and signature input; callers must not assume
+     * successful parsing establishes authentication.
+     *
+     * @param in the in supplied to this operation
+     * @return the result described above
+     * @throws IOException if input/output, stored-state validation or resource handling fails
+     */
     private static String readString(DataInputStream in) throws IOException {
         int length = in.readUnsignedShort();
         if (length > MAX_STRING_BYTES) {
@@ -77,11 +94,25 @@ public final class PacketCodec {
                 .decode(ByteBuffer.wrap(readExact(in, length, "string"))).toString();
     }
 
+    /**
+     * Reads bytes16 from the input used by the versioned encrypted-packet codec.
+     *
+     * @param in the in supplied to this operation
+     * @return the resulting array produced by this operation
+     * @throws IOException if input/output, stored-state validation or resource handling fails
+     */
     private static byte[] readBytes16(DataInputStream in) throws IOException {
         int length = in.readUnsignedShort();
         return readExact(in, length, "bytes16");
     }
 
+    /**
+     * Reads bytes32 from the input used by the versioned encrypted-packet codec.
+     *
+     * @param in the in supplied to this operation
+     * @return the resulting array produced by this operation
+     * @throws IOException if input/output, stored-state validation or resource handling fails
+     */
     private static byte[] readBytes32(DataInputStream in) throws IOException {
         int length = in.readInt();
         if (length < 0) {
@@ -93,6 +124,16 @@ public final class PacketCodec {
         return readExact(in, length, "bytes32");
     }
 
+    /**
+     * Reads the declared bounded field length and rejects a short read instead of accepting a truncated
+     * authenticated representation.
+     *
+     * @param in the in supplied to this operation
+     * @param length the requested or declared byte count
+     * @param field the field supplied to this operation
+     * @return the resulting array produced by this operation
+     * @throws IOException if input/output, stored-state validation or resource handling fails
+     */
     private static byte[] readExact(DataInputStream in, int length, String field) throws IOException {
         byte[] bytes = in.readNBytes(length);
         if (bytes.length != length) {
@@ -101,14 +142,33 @@ public final class PacketCodec {
         return bytes;
     }
 
+    /**
+     * Reports whether session v4 holds for the versioned encrypted-packet codec.
+     *
+     * @param version the version supplied to this operation
+     * @param type the type supplied to this operation
+     * @return whether the condition or operation described above succeeds
+     */
     private static boolean isSessionV4(byte version, PacketType type) {
         return version >= EncryptedPacket.VERSION && type == PacketType.SESSION_MESSAGE;
     }
 
+    /**
+     * Performs the uses kem operation for the versioned encrypted-packet codec.
+     *
+     * @param type the type supplied to this operation
+     * @return whether the condition or operation described above succeeds
+     */
     private static boolean usesKem(PacketType type) {
         return type != PacketType.SESSION_MESSAGE;
     }
 
+    /**
+     * Reports whether signed holds for the versioned encrypted-packet codec.
+     *
+     * @param flags the flags supplied to this operation
+     * @return whether the condition or operation described above succeeds
+     */
     private static boolean isSigned(byte flags) {
         return (flags & FLAG_SIGNED) != 0;
     }

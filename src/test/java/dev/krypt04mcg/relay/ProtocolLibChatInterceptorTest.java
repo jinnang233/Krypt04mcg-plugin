@@ -6,6 +6,9 @@ import org.junit.jupiter.api.Timeout;
 import static org.junit.jupiter.api.Assertions.*;
 
 class ProtocolLibChatInterceptorTest {
+    /**
+     * Verifies that extracts supported private commands only.
+     */
     @Test void extractsSupportedPrivateCommandsOnly() {
         assertEquals("[KRYPT04MCG] body", ProtocolLibChatInterceptor.extractPrivateMessageBody(
                 "/minecraft:tell Bob [KRYPT04MCG] body"));
@@ -14,6 +17,9 @@ class ProtocolLibChatInterceptorTest {
         assertNull(ProtocolLibChatInterceptor.extractPrivateMessageBody(null));
     }
 
+    /**
+     * Verifies that rejects oversized whitespace before regex backtracking.
+     */
     @Test @Timeout(2) void rejectsOversizedWhitespaceBeforeRegexBacktracking() {
         assertNull(ProtocolLibChatInterceptor.extractPrivateMessageBody(
                 "tell Bob " + " ".repeat(100_000) + "x\n"));

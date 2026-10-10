@@ -6,6 +6,11 @@ import java.util.concurrent.atomic.AtomicInteger;
 import static org.junit.jupiter.api.Assertions.*;
 
 class BoundedInboxTest {
+    /**
+     * Verifies that concurrent flood is bounded and close prevents repopulation.
+     *
+     * @throws Exception if the delegated operation cannot complete successfully
+     */
     @Test void concurrentFloodIsBoundedAndClosePreventsRepopulation() throws Exception {
         var inbox = new BoundedInbox<Integer>(1024);
         var accepted = new AtomicInteger();
@@ -24,6 +29,9 @@ class BoundedInboxTest {
         assertFalse(inbox.offer(1));
     }
 
+    /**
+     * Verifies that preserves order and recovers capacity after drain.
+     */
     @Test void preservesOrderAndRecoversCapacityAfterDrain() {
         var inbox = new BoundedInbox<Integer>(2);
         assertTrue(inbox.offer(1));

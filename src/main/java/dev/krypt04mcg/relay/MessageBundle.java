@@ -17,11 +17,24 @@ public final class MessageBundle {
     private final FileConfiguration messages;
     private final FileConfiguration fallback;
 
+    /**
+     * Creates a message bundle with the supplied dependencies and initial state.
+     *
+     * @param messages the messages supplied to this operation
+     * @param fallback the fallback supplied to this operation
+     */
     MessageBundle(FileConfiguration messages, FileConfiguration fallback) {
         this.messages = messages;
         this.fallback = fallback;
     }
 
+    /**
+     * Performs the load operation for the message bundle.
+     *
+     * @param plugin the plugin supplied to this operation
+     * @param language the language supplied to this operation
+     * @return the result described above
+     */
     public static MessageBundle load(Krypt04McgRelayPlugin plugin, String language) {
         for (String builtIn : new String[]{"messages_en_us.yml", "messages_zh_cn.yml"}) {
             if (!new File(plugin.getDataFolder(), builtIn).isFile()) plugin.saveResource(builtIn, false);
@@ -29,6 +42,14 @@ public final class MessageBundle {
         return load(plugin.getDataFolder(), language, plugin.getLogger());
     }
 
+    /**
+     * Performs the load operation for the message bundle.
+     *
+     * @param directory the directory supplied to this operation
+     * @param language the language supplied to this operation
+     * @param logger the logger supplied to this operation
+     * @return the result described above
+     */
     static MessageBundle load(File directory, String language, Logger logger) {
         String normalized = normalize(language);
         String fileName = "messages_" + normalized + ".yml";
@@ -42,6 +63,13 @@ public final class MessageBundle {
                 YamlConfiguration.loadConfiguration(fallbackFile));
     }
 
+    /**
+     * Returns the recorded value for the message bundle.
+     *
+     * @param key the cryptographic key material for this operation
+     * @param placeholders the placeholders supplied to this operation
+     * @return the result described above
+     */
     public String text(String key, String... placeholders) {
         String value = ChatColor.translateAlternateColorCodes('&', messages.getString(key, fallback.getString(key, key)));
         if (placeholders.length == 0) return value;
@@ -54,6 +82,12 @@ public final class MessageBundle {
                 replacements.getOrDefault(match.group(1), match.group())));
     }
 
+    /**
+     * Normalizes the supplied identifier into the comparison/storage form used by the message bundle.
+     *
+     * @param language the language supplied to this operation
+     * @return the result described above
+     */
     static String normalize(String language) {
         if (language == null || language.isBlank()) {
             return "zh_cn";

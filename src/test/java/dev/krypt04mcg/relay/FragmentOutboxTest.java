@@ -8,6 +8,9 @@ import java.util.List;
 import static org.junit.jupiter.api.Assertions.*;
 
 class FragmentOutboxTest {
+    /**
+     * Verifies that each poll sends only one fragment and preserves target and message order.
+     */
     @Test void eachPollSendsOnlyOneFragmentAndPreservesTargetAndMessageOrder() {
         var queue = new FragmentOutbox<String>();
         assertTrue(queue.offer("Alice", List.of("Bob", "Alice"), List.of("first", "second"), 0));
@@ -20,6 +23,9 @@ class FragmentOutboxTest {
         assertNull(queue.poll(0));
     }
 
+    /**
+     * Verifies that bounds messages and releases capacity after delivery.
+     */
     @Test void boundsMessagesAndReleasesCapacityAfterDelivery() {
         var queue = new FragmentOutbox<String>();
         for (int i = 0; i < 64; i++) assertTrue(queue.offer("a", List.of("b"), List.of("x"), 0));
@@ -28,6 +34,9 @@ class FragmentOutboxTest {
         assertTrue(queue.offer("a", List.of("b"), List.of("x"), 0));
     }
 
+    /**
+     * Verifies that completed queue can exceed former text quota and accept2048 fragments.
+     */
     @Test void completedQueueCanExceedFormerTextQuotaAndAccept2048Fragments() {
         var queue = new FragmentOutbox<String>();
         var large = Collections.nCopies(2048, "x".repeat(256));
@@ -39,6 +48,9 @@ class FragmentOutboxTest {
         assertTrue(queue.offer("a", List.of("b"), large, 0));
     }
 
+    /**
+     * Verifies that stalled delivery expires and does not hold capacity.
+     */
     @Test void stalledDeliveryExpiresAndDoesNotHoldCapacity() {
         var queue = new FragmentOutbox<String>();
         assertTrue(queue.offer("a", List.of("b"), List.of("x", "y"), 0));
@@ -48,6 +60,9 @@ class FragmentOutboxTest {
         assertEquals("z", queue.poll(10_000_000_000L).fragment());
     }
 
+    /**
+     * Verifies that disconnect and shutdown release deliveries.
+     */
     @Test void disconnectAndShutdownReleaseDeliveries() {
         var queue = new FragmentOutbox<String>();
         queue.offer("a", List.of("b"), List.of("x"), 0);

@@ -23,10 +23,18 @@ final class CustomPayloadRelay implements PluginMessageListener {
     private final Plugin plugin;
     private final RelayTrafficLimiter traffic = new RelayTrafficLimiter();
 
+    /**
+     * Creates a custom payload relay with the supplied dependencies and initial state.
+     *
+     * @param plugin the plugin supplied to this operation
+     */
     CustomPayloadRelay(Plugin plugin) {
         this.plugin = plugin;
     }
 
+    /**
+     * Registers the supported callbacks and channels for the legacy custom-payload relay.
+     */
     void register() {
         Messenger messenger = plugin.getServer().getMessenger();
         for (String channel : CHANNELS) {
@@ -35,6 +43,9 @@ final class CustomPayloadRelay implements PluginMessageListener {
         }
     }
 
+    /**
+     * Removes the registered callbacks and channels from the legacy custom-payload relay.
+     */
     void unregister() {
         traffic.clear();
         Messenger messenger = plugin.getServer().getMessenger();
@@ -44,6 +55,15 @@ final class CustomPayloadRelay implements PluginMessageListener {
         }
     }
 
+    /**
+     * Dispatches supported legacy chat/key/file/tunnel payloads after channel-specific wire and traffic
+     * checks. Forwarded sender metadata is derived from the authenticated Bukkit player rather than a
+     * caller-supplied name; end-to-end cryptographic verification remains client-side.
+     *
+     * @param channel the business or transport channel identifier
+     * @param source the source supplied to this operation
+     * @param message the message supplied to this operation
+     */
     @Override
     public void onPluginMessageReceived(String channel, Player source, byte[] message) {
         if (!CHANNELS.contains(channel)) {
@@ -100,6 +120,12 @@ final class CustomPayloadRelay implements PluginMessageListener {
         }
     }
 
+    /**
+     * Performs the relay tunnel operation for the legacy custom-payload relay.
+     *
+     * @param source the source supplied to this operation
+     * @param message the message supplied to this operation
+     */
     private void relayTunnel(Player source, byte[] message) {
         PayloadReader reader = new PayloadReader(message);
         String peer = reader.readUtf(MAX_USERNAME_CHARS);
@@ -119,10 +145,26 @@ final class CustomPayloadRelay implements PluginMessageListener {
         receiver.sendPluginMessage(plugin, TUNNEL_CHANNEL, outgoing);
     }
 
+    /**
+     * Performs the safe log text operation for the legacy custom-payload relay.
+     *
+     * @param value the value supplied to this operation
+     * @return the result described above
+     */
     private static String safeLogText(String value) {
         return value.replaceAll("[\\p{Cntrl}\\u2028\\u2029]", " ");
     }
 
+    /**
+     * Serializes forwarded sender identity, opaque fragment contents and protocol version. The
+     * server-authenticated sender label supports client identity binding but does not substitute for
+     * signature or AEAD verification.
+     *
+     * @param sender the sender or source associated with this operation
+     * @param fragment the individual fragment or delivery record
+     * @param version the version supplied to this operation
+     * @return the resulting array produced by this operation
+     */
     static byte[] encodeClientbound(String sender, String fragment, int version) {
         if (version <= 0) {
             throw new IllegalArgumentException("Invalid protocol version");
@@ -135,6 +177,13 @@ final class CustomPayloadRelay implements PluginMessageListener {
         return output.toByteArray();
     }
 
+    /**
+     * Writes utf to the output used by the legacy custom-payload relay.
+     *
+     * @param output the destination buffer or stream for produced data
+     * @param value the value supplied to this operation
+     * @param maxChars the max chars supplied to this operation
+     */
     static void writeUtf(ByteArrayOutputStream output, String value, int maxChars) {
         if (value.length() > maxChars) {
             throw new IllegalArgumentException("String is too long");
@@ -149,6 +198,12 @@ final class CustomPayloadRelay implements PluginMessageListener {
         output.write(bytes, 0, bytes.length);
     }
 
+    /**
+     * Writes var int to the output used by the legacy custom-payload relay.
+     *
+     * @param output the destination buffer or stream for produced data
+     * @param value the value supplied to this operation
+     */
     static void writeVarInt(ByteArrayOutputStream output, int value) {
         while ((value & ~0x7F) != 0) {
             output.write((value & 0x7F) | 0x80);
@@ -158,10 +213,23 @@ final class CustomPayloadRelay implements PluginMessageListener {
     }
 
     record ServerboundPayload(String receiver, String fragment, int version) {
+        /**
+         * Decodes the supplied input using the format expected by the legacy custom-payload relay.
+         *
+         * @param data the data supplied to this operation
+         * @return the result described above
+         */
         static ServerboundPayload decode(byte[] data) {
             return decode(data, MAX_STRING_CHARS);
         }
 
+        /**
+         * Decodes the supplied input using the format expected by the legacy custom-payload relay.
+         *
+         * @param data the data supplied to this operation
+         * @param maxFragmentChars the max fragment chars supplied to this operation
+         * @return the result described above
+         */
         static ServerboundPayload decode(byte[] data, int maxFragmentChars) {
             PayloadReader reader = new PayloadReader(data);
             String receiver = reader.readUtf(MAX_USERNAME_CHARS);
@@ -180,10 +248,21 @@ final class CustomPayloadRelay implements PluginMessageListener {
         private final byte[] data;
         private int index;
 
+        /**
+         * Creates a payload reader with the supplied dependencies and initial state.
+         *
+         * @param data the data supplied to this operation
+         */
         PayloadReader(byte[] data) {
             this.data = data;
         }
 
+        /**
+         * Reads utf from the input used by the legacy custom-payload relay.
+         *
+         * @param maxChars the max chars supplied to this operation
+         * @return the result described above
+         */
         String readUtf(int maxChars) {
             int byteLength = readVarInt();
             if (byteLength < 0 || byteLength > maxChars * 3 || byteLength > data.length - index) {
@@ -206,6 +285,11 @@ final class CustomPayloadRelay implements PluginMessageListener {
             return value;
         }
 
+        /**
+         * Reads var int from the input used by the legacy custom-payload relay.
+         *
+         * @return the result described above
+         */
         int readVarInt() {
             int result = 0;
             int shift = 0;
@@ -225,6 +309,12 @@ final class CustomPayloadRelay implements PluginMessageListener {
             }
         }
 
+        /**
+         * Reads bytes from the input used by the legacy custom-payload relay.
+         *
+         * @param length the requested or declared byte count
+         * @return the resulting array produced by this operation
+         */
         byte[] readBytes(int length) {
             if (length < 0 || length > data.length - index) throw new IllegalArgumentException("Invalid byte length");
             byte[] bytes = java.util.Arrays.copyOfRange(data, index, index + length);
@@ -232,6 +322,11 @@ final class CustomPayloadRelay implements PluginMessageListener {
             return bytes;
         }
 
+        /**
+         * Performs the finished operation for the legacy custom-payload relay.
+         *
+         * @return whether the condition or operation described above succeeds
+         */
         boolean finished() {
             return index == data.length;
         }
